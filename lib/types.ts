@@ -12,6 +12,7 @@ export interface DailyLog {
   period_flag: boolean
   restaurant_meal_flag: boolean
   notes?: string
+  manual_steps?: number
 }
 
 export interface DraftMeal {
@@ -47,11 +48,13 @@ export interface LoggedMeal {
 export interface ActivityLog {
   id: string
   date: string
-  activity_type: 'lifting' | 'boxing' | 'hiit' | 'walking' | 'treadmill' | 'chores' | 'other'
+  activity_type: 'lifting' | 'boxing' | 'hiit' | 'walking' | 'treadmill' | 'chores' | 'hockey' | 'hiking' | 'sup' | 'other'
   minutes: number
   estimated_steps?: number
   estimated_calories_burned?: number
   intensity?: 'low' | 'moderate' | 'high'
+  elevation_gain_ft?: number
+  distance_miles?: number
   pr_flag?: boolean
   pr_notes?: string
   notes?: string

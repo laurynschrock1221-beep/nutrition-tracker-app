@@ -24,7 +24,9 @@ export function computeDayTotals(
   const hydration_oz = hydration.reduce((s, h) => s + h.ounces, 0)
 
   const activity_minutes = activities.reduce((s, a) => s + a.minutes, 0)
-  const estimated_steps = activities.reduce((s, a) => s + (a.estimated_steps ?? 0), 0)
+  const activity_steps = activities.reduce((s, a) => s + (a.estimated_steps ?? 0), 0)
+  // If a pedometer reading was manually entered, use it as the day total (it's more accurate)
+  const estimated_steps = log?.manual_steps ?? activity_steps
   const calories_burned = activities.reduce((s, a) => s + (a.estimated_calories_burned ?? 0), 0)
   const pr_today = activities.some((a) => a.pr_flag)
 
@@ -351,6 +353,12 @@ const MET_TABLE: Record<string, { low: number; moderate: number; high: number }>
   walking:  { low: 2.5, moderate: 3.5, high: 5.0 },
   treadmill:{ low: 6.0, moderate: 8.0, high: 10.0 },
   chores:   { low: 2.0, moderate: 3.0, high: 3.5 },
+  // Hockey game MET is high — skating hard with bursts of intensity
+  hockey:   { low: 6.0, moderate: 8.0, high: 10.0 },
+  // Hiking base MET — elevation bonus added separately via elevation_gain_ft
+  hiking:   { low: 4.0, moderate: 5.5, high: 7.0 },
+  // Stand-up paddleboarding: upper body + balance work
+  sup:      { low: 3.5, moderate: 6.0, high: 8.0 },
   other:    { low: 3.5, moderate: 5.0, high: 7.0 },
 }
 
@@ -359,13 +367,24 @@ export function estimateCaloriesBurned(
   minutes: number,
   intensity: 'low' | 'moderate' | 'high' = 'moderate',
   weightLbs: number = 150,
+  elevationGainFt?: number,
 ): number {
   const mets = MET_TABLE[activityType] ?? MET_TABLE['other']
   const grossMet = mets[intensity]
   const netMet = Math.max(0, grossMet - 1) // subtract resting metabolic rate
   const weightKg = weightLbs / 2.205
   const hours = minutes / 60
-  return Math.round(netMet * weightKg * hours)
+  const base = Math.round(netMet * weightKg * hours)
+
+  // Elevation bonus for hiking: ~1 cal per kg per 100m gained (standard climbing formula)
+  // Converts ft → m, then applies weight-scaled formula
+  let elevationBonus = 0
+  if (activityType === 'hiking' && elevationGainFt && elevationGainFt > 0) {
+    const elevationM = elevationGainFt * 0.3048
+    elevationBonus = Math.round(weightKg * (elevationM / 100))
+  }
+
+  return base + elevationBonus
 }
 
 // ── Format helpers ────────────────────────────────────────────────────────────

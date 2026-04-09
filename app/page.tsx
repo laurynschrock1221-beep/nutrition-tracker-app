@@ -4,11 +4,13 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
   getDailyLog,
+  saveDailyLog,
   getLoggedMeals,
   getActivityLogs,
   getHydrationLogs,
   getSettings,
   deleteLoggedMeal,
+  generateId,
   todayDate,
   seedDraftMealsIfEmpty,
   DEFAULT_SETTINGS,
@@ -87,6 +89,8 @@ export default function TodayPage() {
   const [mounted, setMounted] = useState(false)
   const [loadingRecommendation, setLoadingRecommendation] = useState(false)
   const [aiRecommendation, setAiRecommendation] = useState<string | null>(null)
+  const [stepInput, setStepInput] = useState('')
+  const [savingSteps, setSavingSteps] = useState(false)
 
   const load = useCallback(async () => {
     const [s, dayLog, dayMeals, dayActivities, dayHydration] = await Promise.all([
@@ -177,6 +181,32 @@ export default function TodayPage() {
 
   const handleDeleteMeal = async (id: string) => {
     await deleteLoggedMeal(id)
+    void load()
+  }
+
+  const handleSaveSteps = async () => {
+    const steps = parseInt(stepInput)
+    if (!steps || steps < 0) return
+    setSavingSteps(true)
+    const existing = await getDailyLog(date)
+    await saveDailyLog({
+      id: existing?.id ?? generateId(),
+      date,
+      calorie_target_min: existing?.calorie_target_min ?? settings.calorie_target_min,
+      calorie_target_max: existing?.calorie_target_max ?? settings.calorie_target_max,
+      protein_target_min: existing?.protein_target_min ?? settings.protein_target_min,
+      protein_target_max: existing?.protein_target_max ?? settings.protein_target_max,
+      hydration_target_oz: existing?.hydration_target_oz ?? settings.hydration_target_oz,
+      soreness_level: existing?.soreness_level ?? 0,
+      fatigue_level: existing?.fatigue_level ?? 0,
+      period_flag: existing?.period_flag ?? false,
+      restaurant_meal_flag: existing?.restaurant_meal_flag ?? false,
+      notes: existing?.notes,
+      morning_weight: existing?.morning_weight,
+      manual_steps: steps,
+    })
+    setSavingSteps(false)
+    setStepInput('')
     void load()
   }
 
@@ -442,6 +472,46 @@ export default function TodayPage() {
           </Link>
         </div>
       )}
+
+      {/* Steps card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Steps</p>
+            <p className="text-xl font-bold text-emerald-400">
+              {(totals?.estimated_steps ?? 0).toLocaleString()}
+              <span className="text-slate-500 text-sm font-normal"> / {(settings.step_goal ?? 8000).toLocaleString()}</span>
+            </p>
+          </div>
+          {(totals?.estimated_steps ?? 0) >= (settings.step_goal ?? 8000) && (
+            <span className="text-xs text-emerald-400 font-semibold">Goal hit 🎉</span>
+          )}
+        </div>
+        <ProgressBar
+          value={totals?.estimated_steps ?? 0}
+          max={settings.step_goal ?? 8000}
+          color="bg-emerald-500"
+        />
+        {log?.manual_steps && (
+          <p className="text-xs text-slate-500">From pedometer · tap to update</p>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            value={stepInput}
+            onChange={(e) => setStepInput(e.target.value)}
+            placeholder="Enter pedometer reading..."
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+          />
+          <button
+            onClick={() => void handleSaveSteps()}
+            disabled={!stepInput || savingSteps}
+            className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white px-4 rounded-xl text-sm font-medium transition-colors"
+          >
+            {savingSteps ? '...' : 'Log'}
+          </button>
+        </div>
+      </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-2">

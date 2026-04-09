@@ -23,6 +23,9 @@ const ACTIVITY_TYPES = [
   { type: 'hiit' as const, label: 'HIIT', icon: '🔥', defaultSteps: 2500 },
   { type: 'walking' as const, label: 'Walking', icon: '🚶', defaultSteps: 0 },
   { type: 'treadmill' as const, label: 'Treadmill', icon: '🏃', defaultSteps: 0 },
+  { type: 'hockey' as const, label: 'Hockey (game)', icon: '🏒', defaultSteps: 4000 },
+  { type: 'hiking' as const, label: 'Hiking', icon: '🥾', defaultSteps: 0 },
+  { type: 'sup' as const, label: 'Paddleboarding', icon: '🏄', defaultSteps: 0 },
   { type: 'chores' as const, label: 'Chores / lifestyle', icon: '🏠', defaultSteps: 800 },
 ]
 
@@ -50,6 +53,8 @@ export default function ActivityPage() {
   const [actSteps, setActSteps] = useState('')
   const [actIntensity, setActIntensity] = useState<ActivityLog['intensity']>('moderate')
   const [actNotes, setActNotes] = useState('')
+  const [actElevation, setActElevation] = useState('')
+  const [actDistance, setActDistance] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
@@ -139,7 +144,8 @@ export default function ActivityPage() {
           : selectedType?.defaultSteps ?? 0
 
     const mins = parseInt(actMinutes) || 0
-    const caloriesBurned = estimateCaloriesBurned(actType, mins, actIntensity ?? 'moderate', settings.weight_lbs)
+    const elevationFt = actType === 'hiking' ? parseInt(actElevation) || undefined : undefined
+    const caloriesBurned = estimateCaloriesBurned(actType, mins, actIntensity ?? 'moderate', settings.weight_lbs, elevationFt)
 
     const log: ActivityLog = {
       id: generateId(),
@@ -149,6 +155,8 @@ export default function ActivityPage() {
       estimated_steps: steps,
       estimated_calories_burned: caloriesBurned,
       intensity: actIntensity,
+      elevation_gain_ft: elevationFt,
+      distance_miles: actType === 'hiking' ? parseFloat(actDistance) || undefined : undefined,
       pr_flag: importResult?.is_pr,
       pr_notes: importResult?.pr_notes || undefined,
       notes: actNotes || undefined,
@@ -158,6 +166,8 @@ export default function ActivityPage() {
     setShowActivityForm(false)
     setActNotes('')
     setActSteps('')
+    setActElevation('')
+    setActDistance('')
     setImportResult(null)
   }
 
@@ -307,7 +317,13 @@ export default function ActivityPage() {
             <div className="grid grid-cols-3 gap-2">
               {ACTIVITY_TYPES.map((a) => (
                 <button key={a.type}
-                  onClick={() => { setActType(a.type); setActMinutes(a.type === 'walking' ? '30' : a.type === 'chores' ? '60' : '45'); setShowActivityForm(true) }}
+                  onClick={() => {
+                    setActType(a.type)
+                    setActMinutes(a.type === 'walking' ? '30' : a.type === 'chores' ? '60' : a.type === 'hockey' ? '60' : a.type === 'hiking' ? '120' : a.type === 'sup' ? '60' : '45')
+                    setActElevation('')
+                    setActDistance('')
+                    setShowActivityForm(true)
+                  }}
                   className="flex flex-col items-center gap-1 bg-slate-800 hover:bg-amber-900/20 hover:border-amber-800 border border-slate-700 py-3 rounded-xl transition-colors">
                   <span className="text-xl">{a.icon}</span>
                   <span className="text-xs text-slate-400 text-center leading-tight">{a.label}</span>
@@ -348,6 +364,26 @@ export default function ActivityPage() {
                 <input type="number" value={actSteps} onChange={(e) => setActSteps(e.target.value)}
                   placeholder={actType === 'walking' ? 'e.g. 3500' : 'e.g. 4000'}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500" />
+              </div>
+            )}
+
+            {actType === 'hiking' && (
+              <div className="space-y-3 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                <p className="text-xs text-amber-400 font-medium">Hiking details — both affect calorie burn</p>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500">Elevation gain (feet)</label>
+                  <input type="number" value={actElevation} onChange={(e) => setActElevation(e.target.value)}
+                    placeholder="e.g. 1200"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500" />
+                  <p className="text-xs text-slate-600">Adds ~1 cal/kg per 100m climbed on top of base burn</p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500">Distance (miles, optional)</label>
+                  <input type="number" step="0.1" value={actDistance} onChange={(e) => setActDistance(e.target.value)}
+                    placeholder="e.g. 4.5"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500" />
+                  <p className="text-xs text-slate-600">Logged for your records</p>
+                </div>
               </div>
             )}
             <div className="space-y-1">
