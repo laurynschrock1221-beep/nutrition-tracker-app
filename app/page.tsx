@@ -127,7 +127,9 @@ export default function TodayPage() {
       adjustedTdee = Math.round(settings.tdee * (currentWeight / settings.weight_lbs))
     }
 
-    const dailyDeficit = adjustedTdee != null ? adjustedTdee - totals.calories : undefined
+    const dailyDeficit = adjustedTdee != null
+      ? (adjustedTdee + (totals.calories_burned ?? 0)) - totals.calories
+      : undefined
 
     setLoadingRecommendation(true)
     fetch('/api/coaching', {
