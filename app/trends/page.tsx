@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getDailyLogs, getLoggedMeals, getSettings } from '@/lib/storage'
+import { getDailyLogs, getLoggedMeals, getActivityLogs, getSettings } from '@/lib/storage'
 import {
   buildWeightTrend,
   computeWeeklyStats,
@@ -137,13 +137,14 @@ export default function TrendsPage() {
   useEffect(() => {
     const init = async () => {
       setMounted(true)
-      const [logs, meals, settings] = await Promise.all([
+      const [logs, meals, activities, settings] = await Promise.all([
         getDailyLogs(),
         getLoggedMeals(),
+        getActivityLogs(),
         getSettings(),
       ])
       const weightTrend = buildWeightTrend(logs, 14)
-      const stats = computeWeeklyStats(logs, meals, settings)
+      const stats = computeWeeklyStats(logs, meals, settings, activities)
       setTrend(weightTrend)
       setWeeklyStats(stats)
       const latestWeight = weightTrend.filter((p) => p.weight != null).at(-1)?.weight
@@ -342,7 +343,9 @@ export default function TrendsPage() {
             <StatCard
               label="Est. Deficit"
               value={weeklyStats.est_deficit > 0 ? `${weeklyStats.est_deficit} cal` : weeklyStats.est_deficit < 0 ? `+${Math.abs(weeklyStats.est_deficit)} surplus` : '—'}
-              sub={`vs ${weeklyStats.effective_tdee} cal maintenance`}
+              sub={weeklyStats.avg_calories_burned > 0
+                ? `TDEE ${weeklyStats.effective_tdee} + ~${weeklyStats.avg_calories_burned} activity`
+                : `vs ${weeklyStats.effective_tdee} cal maintenance`}
               color={weeklyStats.est_deficit > 0 ? 'text-emerald-400' : 'text-amber-400'}
             />
             {weeklyStats.avg_weight && <StatCard label="Avg Weight" value={`${weeklyStats.avg_weight} lbs`} sub="7-day rolling" />}

@@ -8,6 +8,8 @@ import type {
   WeightPoint,
 } from './types'
 
+export type { ActivityLog }
+
 // ── Day totals ────────────────────────────────────────────────────────────────
 
 export function computeDayTotals(
@@ -163,8 +165,9 @@ export interface WeeklyStats {
   avg_calories: number
   avg_protein: number
   avg_weight?: number
+  avg_calories_burned: number  // avg net calories burned from activity per logged day
   effective_tdee: number       // TDEE adjusted for current weight (or base if no weight data)
-  est_deficit: number          // avg_calories vs effective_tdee
+  est_deficit: number          // (effective_tdee + avg_calories_burned) - avg_calories
   adjusted_tdee?: number       // set only when weight has drifted from reference weight
 }
 
@@ -172,6 +175,7 @@ export function computeWeeklyStats(
   logs: DailyLog[],
   allMeals: LoggedMeal[],
   settings?: { tdee?: number; weight_lbs?: number },
+  allActivities?: ActivityLog[],
 ): WeeklyStats {
   const last7 = getLastNDays(7)
   const weekLogs = logs.filter((l) => last7.includes(l.date))
@@ -205,10 +209,23 @@ export function computeWeeklyStats(
     adjusted_tdee = Math.round(settings.tdee * (avg_weight / refWeight))
   }
 
-  const effective_tdee = adjusted_tdee ?? baseTdee
-  const est_deficit = avg_calories > 0 ? Math.round(effective_tdee - avg_calories) : 0
+  // Average daily calories burned from logged activities over the past 7 days.
+  // These are net calories (resting rate already subtracted in estimateCaloriesBurned),
+  // so they add directly on top of the sedentary TDEE.
+  const weekActivities = (allActivities ?? []).filter((a) => last7.includes(a.date))
+  const burnByDay = groupByDate(
+    weekActivities.map((a) => ({ date: a.date, val: a.estimated_calories_burned ?? 0 }))
+  )
+  const burnDays = Object.values(burnByDay)
+  const avg_calories_burned = burnDays.length
+    ? Math.round(burnDays.reduce((s, v) => s + v, 0) / burnDays.length)
+    : 0
 
-  return { avg_calories, avg_protein, avg_weight, effective_tdee, est_deficit, adjusted_tdee }
+  const effective_tdee = adjusted_tdee ?? baseTdee
+  // Total expenditure = sedentary TDEE + activity burn. Deficit = that minus intake.
+  const est_deficit = avg_calories > 0 ? Math.round(effective_tdee + avg_calories_burned - avg_calories) : 0
+
+  return { avg_calories, avg_protein, avg_weight, avg_calories_burned, effective_tdee, est_deficit, adjusted_tdee }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -228,7 +228,10 @@ export default function TodayPage() {
     if (settings.weight_lbs && currentWeight && Math.abs(currentWeight - settings.weight_lbs) >= 1) {
       tdee = Math.round(settings.tdee * (currentWeight / settings.weight_lbs))
     }
-    return { deficit: tdee - totals.calories, tdee }
+    // Add net activity burn on top of sedentary TDEE — user enters TDEE at rest,
+    // so any calories burned exercising increase total expenditure for the day.
+    const totalExpenditure = tdee + (totals.calories_burned ?? 0)
+    return { deficit: totalExpenditure - totals.calories, tdee, calories_burned: totals.calories_burned ?? 0 }
   })()
 
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
@@ -357,7 +360,11 @@ export default function TodayPage() {
 
           {dailyDeficit && (
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">vs {dailyDeficit.tdee} cal TDEE</span>
+              <span className="text-slate-500">
+                {dailyDeficit.calories_burned > 0
+                  ? `${dailyDeficit.tdee} TDEE + ${dailyDeficit.calories_burned} burned`
+                  : `vs ${dailyDeficit.tdee} cal TDEE`}
+              </span>
               <span
                 className={`font-semibold ${
                   dailyDeficit.deficit > 0
