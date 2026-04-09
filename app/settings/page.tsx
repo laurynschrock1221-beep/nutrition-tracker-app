@@ -78,7 +78,8 @@ export default function SettingsPage() {
     setExtractError('')
     setExtractResult(null)
     try {
-      const texts = await Promise.all(files.map(async (file) => {
+      const texts: string[] = []
+      for (const file of files) {
         const form = new FormData()
         form.append('file', file)
         const res = await fetch('/api/parse-document', { method: 'POST', body: form })
@@ -87,8 +88,8 @@ export default function SettingsPage() {
           throw new Error(`${file.name}: ${error ?? 'Parse failed'}`)
         }
         const { text } = await res.json()
-        return `--- ${file.name} ---\n${text}`
-      }))
+        texts.push(`--- ${file.name} ---\n${text}`)
+      }
       setVaultText(texts.join('\n\n'))
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : 'Failed to parse one or more files.')
