@@ -42,7 +42,7 @@ export default function AuthPage() {
       <div className="w-full max-w-sm space-y-6">
         {/* Logo / title */}
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold">Nutrition Tracker</h1>
+          <h1 className="text-2xl font-bold">Resume Drafter</h1>
           <p className="text-slate-400 text-sm">
             {mode === 'signin' ? 'Sign in to your account' : 'Create your account'}
           </p>

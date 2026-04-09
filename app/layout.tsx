@@ -9,8 +9,8 @@ const geist = Geist({
 })
 
 export const metadata: Metadata = {
-  title: 'Nutrition Tracker',
-  description: 'Log meals, track trends, stay on target.',
+  title: 'Resume Drafter',
+  description: 'Tailored resume drafts for strong-fit roles.',
 }
 
 export const viewport: Viewport = {

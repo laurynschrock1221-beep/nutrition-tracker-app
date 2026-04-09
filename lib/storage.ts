@@ -1,151 +1,14 @@
 import { supabase } from './supabase'
 import type {
-  DailyLog,
-  DraftMeal,
-  LoggedMeal,
-  ActivityLog,
-  HydrationLog,
+  ProcessedState,
+  ManualRole,
+  DailyCount,
+  RunDigest,
   UserSettings,
+  RoleStatus,
+  ApplicationEntry,
+  ApplicationStatus,
 } from './types'
-
-// ── Defaults ──────────────────────────────────────────────────────────────────
-
-export const DEFAULT_SETTINGS: UserSettings = {
-  calorie_target_min: 1400,
-  calorie_target_max: 1600,
-  protein_target_min: 120,
-  protein_target_max: 140,
-  hydration_target_oz: 80,
-  step_goal: 8000,
-}
-
-// ── Daily Logs ────────────────────────────────────────────────────────────────
-
-export async function getDailyLogs(): Promise<DailyLog[]> {
-  const { data } = await supabase.from('daily_logs').select('*').order('date')
-  return (data ?? []) as DailyLog[]
-}
-
-export async function getDailyLog(date: string): Promise<DailyLog | null> {
-  const { data } = await supabase
-    .from('daily_logs')
-    .select('*')
-    .eq('date', date)
-    .maybeSingle()
-  return data as DailyLog | null
-}
-
-export async function saveDailyLog(log: DailyLog): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase
-    .from('daily_logs')
-    .upsert({ ...log, user_id: user.id })
-}
-
-// ── Draft Meals ───────────────────────────────────────────────────────────────
-
-export async function getDraftMeals(): Promise<DraftMeal[]> {
-  const { data } = await supabase
-    .from('draft_meals')
-    .select('*')
-    .order('favorite', { ascending: false })
-  return (data ?? []) as DraftMeal[]
-}
-
-export async function getDraftMeal(id: string): Promise<DraftMeal | null> {
-  const { data } = await supabase
-    .from('draft_meals')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle()
-  return data as DraftMeal | null
-}
-
-export async function saveDraftMeal(meal: DraftMeal): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase.from('draft_meals').upsert({ ...meal, user_id: user.id })
-}
-
-export async function deleteDraftMeal(id: string): Promise<void> {
-  await supabase.from('draft_meals').delete().eq('id', id)
-}
-
-// ── Logged Meals ──────────────────────────────────────────────────────────────
-
-export async function getLoggedMeals(date?: string): Promise<LoggedMeal[]> {
-  let query = supabase.from('logged_meals').select('*').order('time')
-  if (date) query = query.eq('date', date)
-  const { data } = await query
-  return (data ?? []) as LoggedMeal[]
-}
-
-export async function saveLoggedMeal(meal: LoggedMeal): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase.from('logged_meals').upsert({ ...meal, user_id: user.id })
-}
-
-export async function deleteLoggedMeal(id: string): Promise<void> {
-  await supabase.from('logged_meals').delete().eq('id', id)
-}
-
-// ── Activity Logs ─────────────────────────────────────────────────────────────
-
-export async function getActivityLogs(date?: string): Promise<ActivityLog[]> {
-  let query = supabase.from('activity_logs').select('*').order('id')
-  if (date) query = query.eq('date', date)
-  const { data } = await query
-  return (data ?? []) as ActivityLog[]
-}
-
-export async function saveActivityLog(log: ActivityLog): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase.from('activity_logs').upsert({ ...log, user_id: user.id })
-}
-
-export async function deleteActivityLog(id: string): Promise<void> {
-  await supabase.from('activity_logs').delete().eq('id', id)
-}
-
-// ── Hydration Logs ────────────────────────────────────────────────────────────
-
-export async function getHydrationLogs(date?: string): Promise<HydrationLog[]> {
-  let query = supabase.from('hydration_logs').select('*').order('time')
-  if (date) query = query.eq('date', date)
-  const { data } = await query
-  return (data ?? []) as HydrationLog[]
-}
-
-export async function saveHydrationLog(log: HydrationLog): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase.from('hydration_logs').upsert({ ...log, user_id: user.id })
-}
-
-export async function deleteHydrationLog(id: string): Promise<void> {
-  await supabase.from('hydration_logs').delete().eq('id', id)
-}
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-
-export async function getSettings(): Promise<UserSettings> {
-  const { data } = await supabase.from('user_settings').select('*').maybeSingle()
-  if (!data) return { ...DEFAULT_SETTINGS }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { user_id, ...settings } = data as UserSettings & { user_id: string }
-  return settings
-}
-
-export async function saveSettings(s: UserSettings): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase
-    .from('user_settings')
-    .upsert({ ...s, user_id: user.id }, { onConflict: 'user_id' })
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -157,94 +20,274 @@ export function todayDate(): string {
   return new Date().toISOString().split('T')[0]
 }
 
-// ── Seed Data ─────────────────────────────────────────────────────────────────
+async function getUserId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  return user?.id ?? null
+}
 
-const SEED_DRAFTS: Omit<DraftMeal, 'id' | 'created_at'>[] = [
-  {
-    name: 'Breakfast Taco',
-    meal_type: 'breakfast',
-    ingredient_list: '2 scrambled eggs, 1 small flour tortilla, 1 oz chorizo crumbles, salsa',
-    default_portions: '2 tacos',
-    estimated_calories: 320,
-    estimated_protein: 22,
-    estimated_carbs: 24,
-    estimated_fat: 14,
-    tags: ['breakfast', 'high-protein'],
-    notes: '',
-    favorite: true,
-  },
-  {
-    name: 'Protein Shake',
-    meal_type: 'snack',
-    ingredient_list: '1.5 scoops whey protein, 1 cup unsweetened almond milk',
-    default_portions: '1 shake',
-    estimated_calories: 190,
-    estimated_protein: 38,
-    estimated_carbs: 5,
-    estimated_fat: 3,
-    tags: ['snack', 'high-protein', 'training-day'],
-    notes: '',
-    favorite: true,
-  },
-  {
-    name: 'Tuna Rice Cake Lunch',
-    meal_type: 'lunch',
-    ingredient_list: '1 can tuna (5 oz), 4 rice cakes, mustard, pickles',
-    default_portions: '1 serving',
-    estimated_calories: 260,
-    estimated_protein: 38,
-    estimated_carbs: 20,
-    estimated_fat: 2,
-    tags: ['lunch', 'high-protein', 'low-fat'],
-    notes: '',
-    favorite: true,
-  },
-  {
-    name: 'Cottage Cheese Bowl',
-    meal_type: 'snack',
-    ingredient_list: '1 cup low-fat cottage cheese, 1/2 cup mixed berries',
-    default_portions: '1 bowl',
-    estimated_calories: 180,
-    estimated_protein: 24,
-    estimated_carbs: 16,
-    estimated_fat: 3,
-    tags: ['snack', 'high-protein', 'rest-day'],
-    notes: '',
-    favorite: false,
-  },
-  {
-    name: 'Salmon Bowl',
-    meal_type: 'dinner',
-    ingredient_list: '5 oz salmon, 3/4 cup cooked rice, roasted broccoli, lemon',
-    default_portions: '1 bowl',
-    estimated_calories: 480,
-    estimated_protein: 42,
-    estimated_carbs: 42,
-    estimated_fat: 12,
-    tags: ['dinner', 'high-protein', 'training-day'],
-    notes: '',
-    favorite: false,
-  },
-  {
-    name: 'Chicken & Rice',
-    meal_type: 'dinner',
-    ingredient_list: '5 oz grilled chicken breast, 3/4 cup cooked white rice, steamed broccoli',
-    default_portions: '1 plate',
-    estimated_calories: 430,
-    estimated_protein: 48,
-    estimated_carbs: 40,
-    estimated_fat: 5,
-    tags: ['dinner', 'high-protein', 'lean'],
-    notes: '',
-    favorite: false,
-  },
-]
+// ── Processed State ───────────────────────────────────────────────────────────
 
-export async function seedDraftMealsIfEmpty(): Promise<void> {
-  const existing = await getDraftMeals()
-  if (existing.length > 0) return
+export async function getProcessedStates(): Promise<ProcessedState[]> {
+  const { data } = await supabase
+    .from('processed_state')
+    .select('*')
+    .order('updated_at', { ascending: false })
+  return (data ?? []) as ProcessedState[]
+}
+
+export async function getProcessedStateByKey(role_key: string): Promise<ProcessedState | null> {
+  const { data } = await supabase
+    .from('processed_state')
+    .select('*')
+    .eq('role_key', role_key)
+    .maybeSingle()
+  return data as ProcessedState | null
+}
+
+export async function getProcessedStateById(id: string): Promise<ProcessedState | null> {
+  const { data } = await supabase
+    .from('processed_state')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  return data as ProcessedState | null
+}
+
+export async function getTodayProcessedStates(): Promise<ProcessedState[]> {
+  const today = todayDate()
+  const { data } = await supabase
+    .from('processed_state')
+    .select('*')
+    .eq('last_seen', today)
+    .order('updated_at', { ascending: false })
+  return (data ?? []) as ProcessedState[]
+}
+
+export async function getProcessedStatesByStatus(status: RoleStatus): Promise<ProcessedState[]> {
+  const { data } = await supabase
+    .from('processed_state')
+    .select('*')
+    .eq('status', status)
+    .order('updated_at', { ascending: false })
+  return (data ?? []) as ProcessedState[]
+}
+
+export async function saveProcessedState(state: Omit<ProcessedState, 'user_id'>): Promise<void> {
+  const uid = await getUserId()
+  if (!uid) return
   const now = new Date().toISOString()
-  for (const draft of SEED_DRAFTS) {
-    await saveDraftMeal({ ...draft, id: generateId(), created_at: now })
+  await supabase
+    .from('processed_state')
+    .upsert(
+      { ...state, user_id: uid, updated_at: now },
+      { onConflict: 'role_key,user_id' }
+    )
+}
+
+export async function updateProcessedStatus(
+  role_key: string,
+  status: RoleStatus,
+  extra?: Partial<ProcessedState>
+): Promise<void> {
+  const uid = await getUserId()
+  if (!uid) return
+  const now = new Date().toISOString()
+  await supabase
+    .from('processed_state')
+    .update({ status, updated_at: now, ...extra })
+    .eq('role_key', role_key)
+    .eq('user_id', uid)
+}
+
+export async function deleteProcessedState(id: string): Promise<void> {
+  await supabase.from('processed_state').delete().eq('id', id)
+}
+
+// ── Manual Roles ──────────────────────────────────────────────────────────────
+
+export async function getManualRoles(): Promise<ManualRole[]> {
+  const { data } = await supabase
+    .from('manual_roles')
+    .select('*')
+    .order('created_at', { ascending: false })
+  return (data ?? []) as ManualRole[]
+}
+
+export async function getPendingManualRoles(): Promise<ManualRole[]> {
+  const { data } = await supabase
+    .from('manual_roles')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  return (data ?? []) as ManualRole[]
+}
+
+export async function saveManualRole(role: Omit<ManualRole, 'user_id'>): Promise<ManualRole> {
+  const uid = await getUserId()
+  if (!uid) throw new Error('Not authenticated')
+  const { data, error } = await supabase
+    .from('manual_roles')
+    .insert({ ...role, user_id: uid })
+    .select()
+    .single()
+  if (error) throw error
+  return data as ManualRole
+}
+
+export async function updateManualRoleStatus(
+  id: string,
+  status: ManualRole['status'],
+  extra?: Partial<ManualRole>
+): Promise<void> {
+  await supabase
+    .from('manual_roles')
+    .update({ status, ...extra })
+    .eq('id', id)
+}
+
+export async function deleteManualRole(id: string): Promise<void> {
+  await supabase.from('manual_roles').delete().eq('id', id)
+}
+
+// ── Daily Counts ──────────────────────────────────────────────────────────────
+
+export async function getDailyCount(date: string): Promise<DailyCount | null> {
+  const { data } = await supabase
+    .from('daily_counts')
+    .select('*')
+    .eq('date', date)
+    .maybeSingle()
+  return data as DailyCount | null
+}
+
+export async function upsertDailyCount(date: string, patch: Partial<DailyCount>): Promise<void> {
+  const uid = await getUserId()
+  if (!uid) return
+  const existing = await getDailyCount(date)
+  const base: Partial<DailyCount> = existing ?? {
+    id: generateId(),
+    date,
+    generated_count: 0,
+    dropped_count: 0,
+    scored_count: 0,
+    needs_jd_count: 0,
+    user_id: uid,
   }
+  await supabase
+    .from('daily_counts')
+    .upsert({ ...base, ...patch, user_id: uid }, { onConflict: 'date,user_id' })
+}
+
+export async function incrementDailyCount(
+  date: string,
+  field: 'generated_count' | 'dropped_count' | 'scored_count' | 'needs_jd_count'
+): Promise<void> {
+  const current = await getDailyCount(date)
+  const currentVal = current?.[field] ?? 0
+  await upsertDailyCount(date, { [field]: currentVal + 1 })
+}
+
+// ── Run Digests ───────────────────────────────────────────────────────────────
+
+export async function getRunDigests(): Promise<RunDigest[]> {
+  const { data } = await supabase
+    .from('run_digests')
+    .select('*')
+    .order('date', { ascending: false })
+    .limit(30)
+  return (data ?? []) as RunDigest[]
+}
+
+export async function getLatestDigest(): Promise<RunDigest | null> {
+  const { data } = await supabase
+    .from('run_digests')
+    .select('*')
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data as RunDigest | null
+}
+
+export async function saveRunDigest(digest: Omit<RunDigest, 'user_id'>): Promise<void> {
+  const uid = await getUserId()
+  if (!uid) return
+  await supabase
+    .from('run_digests')
+    .upsert({ ...digest, user_id: uid }, { onConflict: 'date,user_id' })
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export const DEFAULT_SETTINGS: Omit<UserSettings, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
+  master_resume: '',
+  fact_bank: '',
+  daily_cap: 5,
+  match_threshold: 55,
+  target_titles: [],
+  target_locations: [],
+  excluded_terms: [],
+}
+
+export async function getSettings(): Promise<UserSettings> {
+  const { data } = await supabase.from('user_settings').select('*').maybeSingle()
+  if (!data) {
+    const uid = await getUserId()
+    return {
+      ...DEFAULT_SETTINGS,
+      id: generateId(),
+      user_id: uid ?? '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+  }
+  return data as UserSettings
+}
+
+export async function saveSettings(s: Partial<UserSettings>): Promise<void> {
+  const uid = await getUserId()
+  if (!uid) return
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert(
+      { id: generateId(), ...s, user_id: uid, updated_at: now },
+      { onConflict: 'user_id' }
+    )
+  if (error) throw new Error(`${error.message} (code: ${error.code})`)
+}
+
+// ── Application Tracker ───────────────────────────────────────────────────────
+
+export async function getApplications(): Promise<ApplicationEntry[]> {
+  const { data } = await supabase
+    .from('application_tracker')
+    .select('*')
+    .order('updated_at', { ascending: false })
+  return (data ?? []) as ApplicationEntry[]
+}
+
+export async function saveApplication(app: Omit<ApplicationEntry, 'user_id'>): Promise<void> {
+  const uid = await getUserId()
+  if (!uid) return
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('application_tracker')
+    .upsert({ ...app, user_id: uid, updated_at: now }, { onConflict: 'id' })
+  if (error) throw new Error(`${error.message} (code: ${error.code})`)
+}
+
+export async function updateApplicationStatus(
+  id: string,
+  status: ApplicationStatus,
+  extra?: Partial<ApplicationEntry>
+): Promise<void> {
+  const now = new Date().toISOString()
+  await supabase
+    .from('application_tracker')
+    .update({ status, updated_at: now, ...extra })
+    .eq('id', id)
+}
+
+export async function deleteApplication(id: string): Promise<void> {
+  await supabase.from('application_tracker').delete().eq('id', id)
 }

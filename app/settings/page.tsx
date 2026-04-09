@@ -1,213 +1,358 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getSettings, saveSettings, getDailyLog, saveDailyLog, todayDate, DEFAULT_SETTINGS } from '@/lib/storage'
+import { useRouter } from 'next/navigation'
+import { getSettings, saveSettings } from '@/lib/storage'
+import { supabase } from '@/lib/supabase'
 import type { UserSettings } from '@/lib/types'
 
-function Field({
-  label,
-  sub,
-  value,
-  onChange,
-  placeholder,
-  type = 'number',
-}: {
-  label: string
-  sub?: string
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-  type?: string
-}) {
-  return (
-    <div className="space-y-1">
-      <div>
-        <label className="text-sm font-medium text-slate-300">{label}</label>
-        {sub && <p className="text-xs text-slate-500">{sub}</p>}
+export default function SettingsPage() {
+  const router = useRouter()
+  const [settings, setSettings] = useState<Partial<UserSettings>>({
+    master_resume: '',
+    fact_bank: '',
+    daily_cap: 5,
+    match_threshold: 55,
+    target_titles: [],
+    target_locations: [],
+    excluded_terms: [],
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  // Resume Vault
+  const [vaultText, setVaultText] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [extractResult, setExtractResult] = useState<string | null>(null)
+  const [extractError, setExtractError] = useState('')
+
+  // Local string state for comma-separated list fields
+  const [targetTitles, setTargetTitles] = useState('')
+  const [targetLocations, setTargetLocations] = useState('')
+  const [excludedTerms, setExcludedTerms] = useState('')
+
+  useEffect(() => {
+    getSettings().then((s) => {
+      setSettings(s)
+      setTargetTitles((s.target_titles ?? []).join(', '))
+      setTargetLocations((s.target_locations ?? []).join(', '))
+      setExcludedTerms((s.excluded_terms ?? []).join(', '))
+      setLoading(false)
+    })
+  }, [])
+
+  function parseList(val: string): string[] {
+    return val
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveError('')
+    try {
+      await saveSettings({
+        ...settings,
+        target_titles: parseList(targetTitles),
+        target_locations: parseList(targetLocations),
+        excluded_terms: parseList(excludedTerms),
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err)
+      setSaveError(msg || 'Unknown error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    setParsing(true)
+    setExtractError('')
+    setExtractResult(null)
+    try {
+      const texts = await Promise.all(files.map(async (file) => {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await fetch('/api/parse-document', { method: 'POST', body: form })
+        if (!res.ok) {
+          const { error } = await res.json()
+          throw new Error(`${file.name}: ${error ?? 'Parse failed'}`)
+        }
+        const { text } = await res.json()
+        return `--- ${file.name} ---\n${text}`
+      }))
+      setVaultText(texts.join('\n\n'))
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : 'Failed to parse one or more files.')
+    } finally {
+      setParsing(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleExtractFacts() {
+    if (!vaultText.trim()) return
+    setExtracting(true)
+    setExtractResult(null)
+    setExtractError('')
+    try {
+      const res = await fetch('/api/extract-facts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_resume: vaultText,
+          master_resume: settings.master_resume ?? '',
+          fact_bank: settings.fact_bank ?? '',
+        }),
+      })
+      if (!res.ok) throw new Error('Extraction failed')
+      const { extracted } = await res.json()
+
+      if (extracted && extracted !== 'No new facts found.') {
+        const separator = settings.fact_bank?.trim()
+          ? '\n\n— Extracted from older resume —\n'
+          : '— Extracted from older resume —\n'
+        const updated = (settings.fact_bank ?? '') + separator + extracted
+        setSettings(s => ({ ...s, fact_bank: updated }))
+        setExtractResult(extracted)
+        setVaultText('')
+      } else {
+        setExtractResult('No new facts found — your master resume already covers this.')
+      }
+    } catch {
+      setExtractError('Extraction failed. Try again.')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    router.replace('/auth')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-500 text-sm">Loading...</div>
       </div>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-      />
+    )
+  }
+
+  return (
+    <div className="px-4 pt-6 pb-4 space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold text-white">Settings</h1>
+        <p className="text-slate-500 text-sm mt-0.5">Configure your resume and generation preferences.</p>
+      </div>
+
+      {/* Master Resume */}
+      <Section title="Master Resume" description="Your base resume. All tailored drafts are generated from this.">
+        <textarea
+          value={settings.master_resume ?? ''}
+          onChange={(e) => setSettings((s) => ({ ...s, master_resume: e.target.value }))}
+          placeholder="Paste your full resume here (plain text)..."
+          rows={14}
+          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-mono"
+        />
+        {!settings.master_resume?.trim() && (
+          <p className="text-amber-400 text-xs mt-1">Required — needed for scoring and generation.</p>
+        )}
+      </Section>
+
+      {/* Fact Bank */}
+      <Section
+        title="Fact Bank"
+        description="Additional context the AI can draw from: achievements, projects, metrics, and skills not in your resume."
+      >
+        <textarea
+          value={settings.fact_bank ?? ''}
+          onChange={(e) => setSettings((s) => ({ ...s, fact_bank: e.target.value }))}
+          placeholder="e.g. Led Salesforce migration for 200-person org. Reduced contract cycle time by 40%..."
+          rows={6}
+          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none"
+        />
+      </Section>
+
+      {/* Resume Vault */}
+      <Section
+        title="Resume Vault"
+        description="Upload or paste an older resume to extract any new facts, achievements, or skills not already in your master resume. Anything new gets added to your Fact Bank automatically."
+      >
+        {/* File upload */}
+        <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-lg py-3 text-sm transition-colors cursor-pointer ${parsing ? 'border-slate-600 text-slate-500' : 'border-slate-600 hover:border-indigo-500/60 text-slate-400 hover:text-indigo-400'}`}>
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0">
+            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+          </svg>
+          {parsing ? 'Parsing files...' : 'Upload PDF or Word files (select multiple)'}
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx"
+            multiple
+            onChange={handleFileUpload}
+            disabled={parsing}
+            className="hidden"
+          />
+        </label>
+
+        <div className="flex items-center gap-2">
+          <div className="flex-1 border-t border-slate-700" />
+          <span className="text-slate-600 text-xs">or paste text</span>
+          <div className="flex-1 border-t border-slate-700" />
+        </div>
+
+        <textarea
+          value={vaultText}
+          onChange={(e) => { setVaultText(e.target.value); setExtractResult(null) }}
+          placeholder="Paste an older resume here (plain text)..."
+          rows={8}
+          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-mono"
+        />
+        <button
+          onClick={handleExtractFacts}
+          disabled={extracting || parsing || !vaultText.trim()}
+          className="w-full border border-indigo-500/50 hover:bg-indigo-500/10 disabled:opacity-40 text-indigo-400 text-sm font-medium py-2.5 rounded-lg transition-colors"
+        >
+          {extracting ? 'Extracting new facts...' : 'Extract & Add to Fact Bank'}
+        </button>
+        {extractResult && (
+          <div className={`rounded-lg px-3 py-2.5 text-xs ${extractResult.startsWith('No new') ? 'bg-slate-800 text-slate-400' : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'}`}>
+            {extractResult.startsWith('No new') ? extractResult : (
+              <>
+                <p className="font-medium mb-1.5">Added to your Fact Bank:</p>
+                <pre className="whitespace-pre-wrap font-sans">{extractResult}</pre>
+                <p className="text-emerald-400/70 mt-1.5">Hit Save Settings to persist.</p>
+              </>
+            )}
+          </div>
+        )}
+        {extractError && (
+          <p className="text-red-400 text-xs">{extractError}</p>
+        )}
+      </Section>
+
+      {/* Generation settings */}
+      <Section title="Generation Settings" description="Controls for automated pipeline behavior.">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Daily cap</label>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={settings.daily_cap ?? 5}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, daily_cap: parseInt(e.target.value) || 5 }))
+              }
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+            />
+            <p className="text-slate-600 text-[10px] mt-1">Max resumes per day</p>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Match threshold</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={settings.match_threshold ?? 55}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, match_threshold: parseInt(e.target.value) || 55 }))
+              }
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+            />
+            <p className="text-slate-600 text-[10px] mt-1">Min AI score (0–100)</p>
+          </div>
+        </div>
+      </Section>
+
+      {/* Targeting */}
+      <Section
+        title="Targeting (Optional)"
+        description="Used by automated scout to pre-filter roles. Leave blank to disable filtering."
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Target titles</label>
+            <input
+              value={targetTitles}
+              onChange={(e) => setTargetTitles(e.target.value)}
+              placeholder="Program Manager, Operations Manager, RevOps..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Target locations</label>
+            <input
+              value={targetLocations}
+              onChange={(e) => setTargetLocations(e.target.value)}
+              placeholder="Remote, Denver CO, Hybrid..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Excluded terms</label>
+            <input
+              value={excludedTerms}
+              onChange={(e) => setExcludedTerms(e.target.value)}
+              placeholder="engineer, developer, attorney..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+        </div>
+      </Section>
+
+      {saveError && (
+        <p className="text-red-400 text-xs rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
+          {saveError}
+        </p>
+      )}
+
+      {/* Save button */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium py-3 rounded-lg transition-colors"
+      >
+        {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
+      </button>
+
+      {/* Sign out */}
+      <div className="border-t border-slate-800 pt-4">
+        <button
+          onClick={handleSignOut}
+          className="w-full text-slate-500 hover:text-red-400 text-sm py-2 transition-colors"
+        >
+          Sign out
+        </button>
+      </div>
     </div>
   )
 }
 
-export default function SettingsPage() {
-  const [mounted, setMounted] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  const [name, setName] = useState('')
-  const [currentBfPct, setCurrentBfPct] = useState('')
-  const [goalBfPct, setGoalBfPct] = useState('')
-  const [tdee, setTdee] = useState('')
-  const [weightLbs, setWeightLbs] = useState('')
-  const [heightInches, setHeightInches] = useState('')
-  const [calMin, setCalMin] = useState('')
-  const [calMax, setCalMax] = useState('')
-  const [protMin, setProtMin] = useState('')
-  const [protMax, setProtMax] = useState('')
-  const [carbTarget, setCarbTarget] = useState('')
-  const [fatTarget, setFatTarget] = useState('')
-  const [hydTarget, setHydTarget] = useState('')
-  const [stepGoal, setStepGoal] = useState('')
-
-  useEffect(() => {
-    const init = async () => {
-      setMounted(true)
-      const s = await getSettings()
-      setName(s.name ?? '')
-      setCurrentBfPct(s.current_bf_pct?.toString() ?? '')
-      setGoalBfPct(s.goal_bf_pct?.toString() ?? '')
-      setTdee(s.tdee?.toString() ?? '')
-      setWeightLbs(s.weight_lbs?.toString() ?? '')
-      setHeightInches(s.height_inches?.toString() ?? '')
-      setCalMin(s.calorie_target_min.toString())
-      setCalMax(s.calorie_target_max.toString())
-      setProtMin(s.protein_target_min.toString())
-      setProtMax(s.protein_target_max.toString())
-      setCarbTarget(s.carb_target_g?.toString() ?? '')
-      setFatTarget(s.fat_target_g?.toString() ?? '')
-      setHydTarget(s.hydration_target_oz.toString())
-      setStepGoal((s.step_goal ?? 8000).toString())
-    }
-    void init()
-  }, [])
-
-  const handleSave = async () => {
-    const settings: UserSettings = {
-      name: name.trim() || undefined,
-      current_bf_pct: parseFloat(currentBfPct) || undefined,
-      goal_bf_pct: parseFloat(goalBfPct) || undefined,
-      bf_measured_date: parseFloat(currentBfPct) ? new Date().toISOString().split('T')[0] : undefined,
-      tdee: parseInt(tdee) || undefined,
-      weight_lbs: parseFloat(weightLbs) || undefined,
-      height_inches: parseFloat(heightInches) || undefined,
-      calorie_target_min: parseInt(calMin) || DEFAULT_SETTINGS.calorie_target_min,
-      calorie_target_max: parseInt(calMax) || DEFAULT_SETTINGS.calorie_target_max,
-      protein_target_min: parseInt(protMin) || DEFAULT_SETTINGS.protein_target_min,
-      protein_target_max: parseInt(protMax) || DEFAULT_SETTINGS.protein_target_max,
-      carb_target_g: parseInt(carbTarget) || undefined,
-      fat_target_g: parseInt(fatTarget) || undefined,
-      hydration_target_oz: parseInt(hydTarget) || DEFAULT_SETTINGS.hydration_target_oz,
-      step_goal: parseInt(stepGoal) || DEFAULT_SETTINGS.step_goal,
-    }
-    await saveSettings(settings)
-
-    // Push new targets into today's log so Today page reflects immediately
-    const todayLog = await getDailyLog(todayDate())
-    if (todayLog) {
-      await saveDailyLog({
-        ...todayLog,
-        calorie_target_min: settings.calorie_target_min,
-        calorie_target_max: settings.calorie_target_max,
-        protein_target_min: settings.protein_target_min,
-        protein_target_max: settings.protein_target_max,
-        hydration_target_oz: settings.hydration_target_oz,
-      })
-    }
-
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const handleReset = () => {
-    setCalMin(DEFAULT_SETTINGS.calorie_target_min.toString())
-    setCalMax(DEFAULT_SETTINGS.calorie_target_max.toString())
-    setProtMin(DEFAULT_SETTINGS.protein_target_min.toString())
-    setProtMax(DEFAULT_SETTINGS.protein_target_max.toString())
-    setHydTarget(DEFAULT_SETTINGS.hydration_target_oz.toString())
-    setStepGoal((DEFAULT_SETTINGS.step_goal).toString())
-  }
-
-  if (!mounted) return null
-
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="px-4 py-6 space-y-6">
+    <div className="space-y-2">
       <div>
-        <h1 className="text-xl font-bold">Settings</h1>
-        <p className="text-slate-400 text-sm">Default daily targets</p>
+        <p className="text-white text-sm font-medium">{title}</p>
+        {description && <p className="text-slate-500 text-xs mt-0.5">{description}</p>}
       </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
-        <div>
-          <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Goal</h2>
-          <p className="text-xs text-slate-600 mt-1">
-            Body composition focus — not scale weight. Coaching and trend analysis will work toward this.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Current body fat %" sub="Your most recent measurement" value={currentBfPct} onChange={setCurrentBfPct} placeholder="e.g. 28" />
-          <Field label="Goal body fat %" sub="Target composition" value={goalBfPct} onChange={setGoalBfPct} placeholder="e.g. 22" />
-        </div>
-        <p className="text-xs text-slate-600">
-          Update current % whenever you re-measure. The date is recorded automatically so the app knows how recent it is.
-        </p>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
-        <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Personal</h2>
-        <Field label="Your name" sub="Used in the app header" value={name} onChange={setName} type="text" placeholder="Optional" />
-        <Field label="Your TDEE" sub="Maintenance calories at your current weight" value={tdee} onChange={setTdee} placeholder="e.g. 1550" />
-        <p className="text-xs text-slate-600 -mt-2">
-          Used to calculate your deficit on the Trends page. Adapts automatically as your weight changes.
-        </p>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Current weight" sub="lbs — TDEE reference point" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 160" />
-          <Field label="Height" sub="inches total (e.g. 65)" value={heightInches} onChange={setHeightInches} placeholder="e.g. 65" />
-        </div>
-        <p className="text-xs text-slate-600 -mt-2">Update weight here when you want to reset the TDEE reference point.</p>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
-        <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Calorie Targets</h2>
-        <p className="text-xs text-slate-500">These are your default targets. You can override them in the daily check-in.</p>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Min calories" sub="Lower bound" value={calMin} onChange={setCalMin} placeholder="1400" />
-          <Field label="Max calories" sub="Upper bound" value={calMax} onChange={setCalMax} placeholder="1600" />
-        </div>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
-        <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Macro Targets</h2>
-        <p className="text-xs text-slate-500">Baseline targets for a moderate training day. Carbs and calories adjust automatically on rest and high-output days.</p>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Min protein" sub="grams/day" value={protMin} onChange={setProtMin} placeholder="120" />
-          <Field label="Max protein" sub="grams/day" value={protMax} onChange={setProtMax} placeholder="140" />
-          <Field label="Carbs" sub="grams/day (moderate)" value={carbTarget} onChange={setCarbTarget} placeholder="auto from calories" />
-          <Field label="Fat" sub="grams/day (moderate)" value={fatTarget} onChange={setFatTarget} placeholder="auto from calories" />
-        </div>
-        <p className="text-xs text-slate-600">Leave carbs/fat blank to auto-calculate from your calorie target (40% carbs, fills rest with fat).</p>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
-        <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Activity & Hydration</h2>
-        <Field label="Hydration target" sub="ounces per day" value={hydTarget} onChange={setHydTarget} placeholder="80" />
-        <Field label="Daily step goal" sub="estimated steps" value={stepGoal} onChange={setStepGoal} placeholder="8000" />
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
-        <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">About</h2>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          All data is synced to your Supabase account and accessible from any device.
-        </p>
-        <p className="text-xs text-slate-600">Nutrition Tracker · V2</p>
-      </div>
-
-      <div className="space-y-3">
-        <button
-          onClick={() => void handleSave()}
-          className={`w-full font-semibold py-4 rounded-2xl transition-all text-base ${saved ? 'bg-emerald-600 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-white'}`}
-        >
-          {saved ? '✓ Saved!' : 'Save Settings'}
-        </button>
-        <button onClick={handleReset} className="w-full bg-slate-900 border border-slate-700 hover:border-slate-600 text-slate-400 hover:text-white py-3 rounded-2xl transition-colors text-sm">
-          Reset to defaults
-        </button>
-      </div>
+      {children}
     </div>
   )
 }

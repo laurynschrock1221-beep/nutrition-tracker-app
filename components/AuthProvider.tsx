@@ -37,10 +37,25 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return <>{children}</>
   }
 
+  // Resume preview pages need full-width, no nav chrome
+  if (pathname.startsWith('/resume-preview') || pathname.startsWith('/cover-letter-preview')) {
+    return <>{children}</>
+  }
+
   // Logged in — render app with Nav
   return (
     <>
-      <main className="max-w-lg mx-auto pb-20 min-h-screen">{children}</main>
+      <main className="max-w-lg mx-auto pb-20 min-h-screen">
+        {children}
+        <div className="flex justify-center pb-2 pt-4">
+          <a
+            href="/settings"
+            className="text-xs text-slate-600 hover:text-slate-400 transition-colors"
+          >
+            Settings
+          </a>
+        </div>
+      </main>
       <Nav />
     </>
   )

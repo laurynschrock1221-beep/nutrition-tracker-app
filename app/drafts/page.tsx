@@ -1,301 +1,366 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  getDraftMeals,
-  saveDraftMeal,
-  deleteDraftMeal,
+  getProcessedStatesByStatus,
+  deleteProcessedState,
+  getSettings,
+  saveProcessedState,
+  getApplications,
+  saveApplication,
   generateId,
+  todayDate,
 } from '@/lib/storage'
-import type { DraftMeal } from '@/lib/types'
-
-const MEAL_TYPE_ICONS: Record<DraftMeal['meal_type'], string> = {
-  breakfast: '🌅',
-  lunch: '☀️',
-  dinner: '🌙',
-  snack: '🫐',
-}
-
-const COMMON_TAGS = [
-  'high-protein', 'low-fat', 'rest-day', 'training-day',
-  'lean', 'flexible-dinner', 'restaurant', 'quick',
-]
-
-function DraftForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial?: DraftMeal
-  onSave: (d: DraftMeal) => void
-  onCancel: () => void
-}) {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [mealType, setMealType] = useState<DraftMeal['meal_type']>(initial?.meal_type ?? 'lunch')
-  const [ingredients, setIngredients] = useState(initial?.ingredient_list ?? '')
-  const [calories, setCalories] = useState(initial?.estimated_calories.toString() ?? '')
-  const [protein, setProtein] = useState(initial?.estimated_protein.toString() ?? '')
-  const [carbs, setCarbs] = useState(initial?.estimated_carbs.toString() ?? '')
-  const [fat, setFat] = useState(initial?.estimated_fat.toString() ?? '')
-  const [tags, setTags] = useState<string[]>(initial?.tags ?? [])
-  const [notes, setNotes] = useState(initial?.notes ?? '')
-  const [tagInput, setTagInput] = useState('')
-
-  const toggleTag = (tag: string) => {
-    setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
-  }
-
-  const addCustomTag = () => {
-    const t = tagInput.trim().toLowerCase()
-    if (t && !tags.includes(t)) setTags((prev) => [...prev, t])
-    setTagInput('')
-  }
-
-  const handleSave = () => {
-    if (!name.trim()) return
-    const draft: DraftMeal = {
-      id: initial?.id ?? generateId(),
-      name: name.trim(),
-      meal_type: mealType,
-      ingredient_list: ingredients.trim(),
-      estimated_calories: parseInt(calories) || 0,
-      estimated_protein: parseInt(protein) || 0,
-      estimated_carbs: parseInt(carbs) || 0,
-      estimated_fat: parseInt(fat) || 0,
-      tags,
-      notes: notes || undefined,
-      favorite: initial?.favorite ?? false,
-      created_at: initial?.created_at ?? new Date().toISOString(),
-    }
-    onSave(draft)
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500 uppercase tracking-wider">Meal name *</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Breakfast Taco"
-            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500 uppercase tracking-wider">Meal type</label>
-          <div className="grid grid-cols-4 gap-1.5">
-            {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((t) => (
-              <button key={t} onClick={() => setMealType(t)}
-                className={`py-2 rounded-lg text-xs font-medium capitalize transition-all flex flex-col items-center gap-0.5 ${mealType === t ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                <span>{MEAL_TYPE_ICONS[t]}</span>
-                <span>{t}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
-        <label className="text-xs text-slate-500 uppercase tracking-wider">Ingredients</label>
-        <textarea value={ingredients} onChange={(e) => setIngredients(e.target.value)}
-          placeholder="e.g. 2 scrambled eggs, 1 flour tortilla, 1 oz chorizo, salsa"
-          rows={3}
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 resize-none" />
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <label className="text-xs text-slate-500 uppercase tracking-wider">Macros</label>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: 'Calories', value: calories, set: setCalories },
-            { label: 'Protein (g)', value: protein, set: setProtein },
-            { label: 'Carbs (g)', value: carbs, set: setCarbs },
-            { label: 'Fat (g)', value: fat, set: setFat },
-          ].map(({ label, value, set }) => (
-            <div key={label} className="space-y-1">
-              <label className="text-xs text-slate-500">{label}</label>
-              <input type="number" value={value} onChange={(e) => set(e.target.value)} placeholder="0"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <label className="text-xs text-slate-500 uppercase tracking-wider">Tags</label>
-        <div className="flex flex-wrap gap-1.5">
-          {COMMON_TAGS.map((tag) => (
-            <button key={tag} onClick={() => toggleTag(tag)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-all ${tags.includes(tag) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-700 text-slate-400 hover:border-slate-600'}`}>
-              {tag}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input type="text" value={tagInput} onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addCustomTag()} placeholder="Add custom tag..."
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500" />
-          <button onClick={addCustomTag} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-xs text-white">Add</button>
-        </div>
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {tags.map((tag) => (
-              <span key={tag} className="text-xs bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
-                {tag}
-                <button onClick={() => toggleTag(tag)} className="hover:text-red-400">×</button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
-        <label className="text-xs text-slate-500 uppercase tracking-wider">Notes (optional)</label>
-        <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
-          placeholder="Any prep notes or reminders..."
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500" />
-      </div>
-
-      <div className="flex gap-3">
-        <button onClick={onCancel} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-4 rounded-2xl transition-colors">Cancel</button>
-        <button onClick={handleSave} disabled={!name.trim()} className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-semibold py-4 rounded-2xl transition-colors">Save Draft</button>
-      </div>
-    </div>
-  )
-}
+import type { ProcessedState, ApplicationEntry } from '@/lib/types'
 
 export default function DraftsPage() {
-  const [mounted, setMounted] = useState(false)
-  const [drafts, setDrafts] = useState<DraftMeal[]>([])
-  const [editing, setEditing] = useState<DraftMeal | null | 'new'>(null)
-  const [search, setSearch] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-
-  const reload = async () => setDrafts(await getDraftMeals())
+  const [drafts, setDrafts] = useState<ProcessedState[]>([])
+  const [applications, setApplications] = useState<ApplicationEntry[]>([])
+  const [selected, setSelected] = useState<ProcessedState | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [copiedCL, setCopiedCL] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [generatingCL, setGeneratingCL] = useState(false)
+  const [clError, setClError] = useState('')
+  const [activeTab, setActiveTab] = useState<'resume' | 'cover_letter'>('resume')
+  const [markingApplied, setMarkingApplied] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setMounted(true)
-    void reload()
+    Promise.all([
+      getProcessedStatesByStatus('generated'),
+      getApplications(),
+    ]).then(([d, a]) => {
+      setDrafts(d)
+      setApplications(a)
+      setLoading(false)
+    })
   }, [])
 
-  const handleSave = async (draft: DraftMeal) => {
-    await saveDraftMeal(draft)
-    await reload()
-    setEditing(null)
+  function handleCopy(text: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleDelete = async (id: string) => {
-    await deleteDraftMeal(id)
-    await reload()
-    setConfirmDelete(null)
+  async function handleDelete(id: string) {
+    await deleteProcessedState(id)
+    setDrafts((prev) => prev.filter((d) => d.id !== id))
+    setSelected(null)
+    setConfirmDelete(false)
   }
 
-  const handleToggleFavorite = async (draft: DraftMeal) => {
-    await saveDraftMeal({ ...draft, favorite: !draft.favorite })
-    await reload()
+  function handleCopyCL(text: string) {
+    navigator.clipboard.writeText(text)
+    setCopiedCL(true)
+    setTimeout(() => setCopiedCL(false), 2000)
   }
 
-  if (!mounted) return null
+  function isApplied(draft: ProcessedState): boolean {
+    return applications.some(
+      (a) =>
+        a.role_key === draft.role_key ||
+        (a.company === draft.company && a.title === draft.title)
+    )
+  }
 
-  if (editing) {
+  async function handleMarkApplied(draft: ProcessedState) {
+    setMarkingApplied(true)
+    try {
+      const existing = applications.find(
+        (a) => a.role_key === draft.role_key || (a.company === draft.company && a.title === draft.title)
+      )
+      if (existing) return // already tracked
+      const now = new Date().toISOString()
+      const entry: Omit<ApplicationEntry, 'user_id'> = {
+        id: generateId(),
+        company: draft.company,
+        title: draft.title,
+        status: 'applied',
+        applied_date: todayDate(),
+        role_key: draft.role_key,
+        created_at: now,
+        updated_at: now,
+      }
+      await saveApplication(entry)
+      setApplications((prev) => [...prev, { ...entry, user_id: '' }])
+    } finally {
+      setMarkingApplied(false)
+    }
+  }
+
+  async function handleGenerateCoverLetter(draft: ProcessedState) {
+    setGeneratingCL(true)
+    setClError('')
+    try {
+      const settings = await getSettings()
+      const res = await fetch('/api/generate-cover-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jd_text: draft.jd_text ?? '',
+          master_resume: settings.master_resume,
+          fact_bank: settings.fact_bank,
+          resume_text: draft.resume_text,
+          company: draft.company,
+          title: draft.title,
+          location: draft.location,
+        }),
+      })
+      if (!res.ok) throw new Error('Generation failed')
+      const { cover_letter_text } = await res.json()
+
+      await saveProcessedState({ ...draft, cover_letter_text })
+      setDrafts((prev) =>
+        prev.map((d) => (d.id === draft.id ? { ...d, cover_letter_text } : d))
+      )
+      setSelected((prev) => prev ? { ...prev, cover_letter_text } : prev)
+      setActiveTab('cover_letter')
+    } catch {
+      setClError('Cover letter generation failed. Try again.')
+    } finally {
+      setGeneratingCL(false)
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="px-4 py-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-white text-sm">← Back</button>
-          <h1 className="text-xl font-bold">{editing === 'new' ? 'New Draft Meal' : 'Edit Draft Meal'}</h1>
-        </div>
-        <DraftForm
-          initial={editing === 'new' ? undefined : editing}
-          onSave={handleSave}
-          onCancel={() => setEditing(null)}
-        />
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-500 text-sm">Loading...</div>
       </div>
     )
   }
 
-  const filteredDrafts = drafts.filter(
-    (d) =>
-      d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.tags.some((t) => t.includes(search.toLowerCase())) ||
-      d.meal_type.includes(search.toLowerCase()),
-  )
-
   return (
-    <div className="px-4 py-6 space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Draft Meals</h1>
-          <p className="text-slate-400 text-sm">{drafts.length} saved meals</p>
-        </div>
-        <button onClick={() => setEditing('new')} className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">+ New</button>
+    <div className="px-4 pt-6 pb-4 space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold text-white">Generated Drafts</h1>
+        <p className="text-slate-500 text-sm mt-0.5">
+          {drafts.length} draft{drafts.length !== 1 ? 's' : ''} generated
+        </p>
       </div>
 
-      <input type="search" placeholder="Search meals, types, tags..." value={search} onChange={(e) => setSearch(e.target.value)}
-        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500" />
+      {drafts.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-slate-500 text-sm">No drafts yet.</p>
+          <p className="text-slate-600 text-xs mt-1">
+            Paste a job description in the Manual tab to generate your first draft.
+          </p>
+        </div>
+      ) : selected ? (
+        /* Draft detail view */
+        <div className="space-y-4">
+          <button
+            onClick={() => setSelected(null)}
+            className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path
+                fillRule="evenodd"
+                d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Back to list
+          </button>
 
-      {filteredDrafts.length === 0 ? (
-        <div className="text-center py-12 space-y-3">
-          <p className="text-slate-500 text-sm">{search ? 'No matches found.' : 'No draft meals yet.'}</p>
-          {!search && (
-            <button onClick={() => setEditing('new')} className="text-emerald-400 text-sm hover:underline">Create your first draft meal</button>
+          <div className="rounded-xl bg-slate-800/60 border border-slate-700 p-4 space-y-3">
+            <div>
+              <p className="text-white font-medium">{selected.title}</p>
+              <p className="text-slate-400 text-sm">{selected.company}</p>
+              {selected.location && (
+                <p className="text-slate-500 text-xs">{selected.location}</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-xs items-center">
+              {selected.match_pct !== undefined && (
+                <span className="text-emerald-400 font-medium">{selected.match_pct}% match</span>
+              )}
+              <span className="text-slate-500">{selected.last_seen}</span>
+              {selected.is_manual && (
+                <span className="text-indigo-400 border border-indigo-500/40 px-1.5 py-0.5 rounded-full">
+                  manual
+                </span>
+              )}
+              {isApplied(selected) && (
+                <span className="text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded-full">
+                  applied
+                </span>
+              )}
+            </div>
+
+            {!isApplied(selected) && (
+              <button
+                onClick={() => handleMarkApplied(selected)}
+                disabled={markingApplied}
+                className="w-full border border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-400 text-sm font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {markingApplied ? 'Marking...' : 'Mark as Applied'}
+              </button>
+            )}
+
+            {selected.integrity_notes && (
+              <div className="rounded-lg bg-slate-900 px-3 py-2">
+                <p className="text-xs text-slate-400">{selected.integrity_notes}</p>
+              </div>
+            )}
+
+            {/* Tab switcher */}
+            <div className="flex rounded-lg bg-slate-900 p-1 gap-1">
+              <button
+                onClick={() => setActiveTab('resume')}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${activeTab === 'resume' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                Resume
+              </button>
+              <button
+                onClick={() => setActiveTab('cover_letter')}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${activeTab === 'cover_letter' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                Cover Letter {selected.cover_letter_text ? '' : '(not yet generated)'}
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              {activeTab === 'resume' ? (
+                <>
+                  <button
+                    onClick={() => window.open(`/resume-preview/${selected.id}`, '_blank')}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+                  >
+                    Preview &amp; Export PDF
+                  </button>
+                  <button
+                    onClick={() => handleCopy(selected.resume_text ?? '')}
+                    className="px-3 py-2.5 rounded-lg border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-sm transition-colors"
+                  >
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </>
+              ) : selected.cover_letter_text ? (
+                <>
+                  <button
+                    onClick={() => window.open(`/cover-letter-preview/${selected.id}`, '_blank')}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+                  >
+                    Preview &amp; Export PDF
+                  </button>
+                  <button
+                    onClick={() => handleCopyCL(selected.cover_letter_text ?? '')}
+                    className="px-3 py-2.5 rounded-lg border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-sm transition-colors"
+                  >
+                    {copiedCL ? 'Copied!' : 'Copy'}
+                  </button>
+                </>
+
+              ) : (
+                <button
+                  onClick={() => handleGenerateCoverLetter(selected)}
+                  disabled={generatingCL}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+                >
+                  {generatingCL ? 'Generating...' : 'Generate Cover Letter'}
+                </button>
+              )}
+              {clError && <p className="text-red-400 text-xs mt-1">{clError}</p>}
+              {!confirmDelete ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="px-3 py-2.5 rounded-lg border border-red-500/30 text-red-400 hover:text-red-300 text-sm transition-colors"
+                >
+                  Delete
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleDelete(selected.id)}
+                  className="px-3 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors"
+                >
+                  Confirm
+                </button>
+              )}
+            </div>
+
+            <p className="text-slate-500 text-xs">
+              File: {selected.output_file}
+            </p>
+          </div>
+
+          {/* Content preview */}
+          {activeTab === 'resume' && selected.resume_text && (
+            <div className="rounded-xl bg-slate-900 border border-slate-700 p-4">
+              <p className="text-xs text-slate-500 mb-3 font-medium uppercase tracking-wide">Resume Preview</p>
+              <pre className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap font-mono overflow-auto max-h-[60vh]">
+                {selected.resume_text}
+              </pre>
+            </div>
+          )}
+          {activeTab === 'cover_letter' && selected.cover_letter_text && (
+            <div className="rounded-xl bg-slate-900 border border-slate-700 p-4">
+              <p className="text-xs text-slate-500 mb-3 font-medium uppercase tracking-wide">Cover Letter Preview</p>
+              <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                {selected.cover_letter_text}
+              </p>
+            </div>
           )}
         </div>
       ) : (
+        /* Draft list */
         <div className="space-y-2">
-          {filteredDrafts.map((draft) => (
-            <div key={draft.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl mt-0.5">{MEAL_TYPE_ICONS[draft.meal_type]}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{draft.name}</p>
-                    {draft.favorite && <span className="text-amber-400 text-xs">★</span>}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{draft.ingredient_list}</p>
+          {drafts.map((draft) => (
+            <div
+              key={draft.id}
+              className="rounded-xl bg-slate-800/60 border border-slate-700 px-4 py-3 flex items-center gap-3"
+            >
+              <button
+                onClick={() => setSelected(draft)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="text-white text-sm font-medium truncate">{draft.title}</p>
+                <p className="text-slate-400 text-xs truncate">{draft.company}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  {draft.match_pct !== undefined && (
+                    <span className="text-emerald-400 text-xs font-medium">{draft.match_pct}%</span>
+                  )}
+                  <span className="text-slate-500 text-[10px]">{draft.last_seen}</span>
+                  {draft.is_manual && (
+                    <span className="text-[10px] text-indigo-400 border border-indigo-500/40 px-1.5 py-0.5 rounded-full">
+                      manual
+                    </span>
+                  )}
+                  {isApplied(draft) && (
+                    <span className="text-[10px] text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded-full">
+                      applied
+                    </span>
+                  )}
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="font-bold text-sm">{draft.estimated_calories}</p>
-                  <p className="text-xs text-slate-500">cal</p>
+              </button>
+
+              {confirmDeleteId === draft.id ? (
+                <div className="flex gap-1.5 shrink-0">
+                  <button
+                    onClick={() => handleDelete(draft.id)}
+                    className="text-xs bg-red-600 hover:bg-red-500 text-white px-2.5 py-1.5 rounded-lg transition-colors"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div><p className="text-slate-500">Protein</p><p className="font-medium">{draft.estimated_protein}g</p></div>
-                <div><p className="text-slate-500">Carbs</p><p className="font-medium">{draft.estimated_carbs}g</p></div>
-                <div><p className="text-slate-500">Fat</p><p className="font-medium">{draft.estimated_fat}g</p></div>
-              </div>
-
-              {draft.tags.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {draft.tags.map((tag) => (
-                    <span key={tag} className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">{tag}</span>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1 border-t border-slate-800">
-                <button onClick={() => void handleToggleFavorite(draft)}
-                  className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${draft.favorite ? 'text-amber-400 bg-amber-900/20 hover:bg-amber-900/30' : 'text-slate-500 hover:text-slate-300 bg-slate-800 hover:bg-slate-700'}`}>
-                  {draft.favorite ? '★ Favorited' : '☆ Favorite'}
-                </button>
-                <button onClick={() => setEditing(draft)} className="flex-1 text-xs py-1.5 rounded-lg text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-white transition-colors">Edit</button>
+              ) : (
                 <button
-                  onClick={async () => {
-                    const dup: DraftMeal = { ...draft, id: generateId(), name: draft.name + ' (copy)', favorite: false, created_at: new Date().toISOString() }
-                    await saveDraftMeal(dup)
-                    await reload()
-                  }}
-                  className="flex-1 text-xs py-1.5 rounded-lg text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-white transition-colors">
-                  Duplicate
+                  onClick={() => setConfirmDeleteId(draft.id)}
+                  className="shrink-0 text-slate-600 hover:text-red-400 transition-colors p-1"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                  </svg>
                 </button>
-                <button onClick={() => setConfirmDelete(draft.id)} className="flex-1 text-xs py-1.5 rounded-lg text-red-500 bg-slate-800 hover:bg-red-900/20 transition-colors">Delete</button>
-              </div>
-
-              {confirmDelete === draft.id && (
-                <div className="bg-red-950/40 border border-red-900/50 rounded-xl p-3 flex items-center justify-between gap-3">
-                  <p className="text-xs text-red-300">Delete &ldquo;{draft.name}&rdquo;?</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setConfirmDelete(null)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
-                    <button onClick={() => void handleDelete(draft.id)} className="text-xs text-red-400 hover:text-red-300 font-medium">Delete</button>
-                  </div>
-                </div>
               )}
             </div>
           ))}
