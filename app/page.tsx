@@ -124,9 +124,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Generated" value={gen} max={cap} color="emerald" />
-        <StatCard label="Dropped" value={dropped} color="red" />
         <StatCard label="Scored" value={scored} color="blue" />
-        <StatCard label="Needs JD" value={needsJd} color="yellow" />
       </div>
 
       <div>

@@ -134,7 +134,7 @@ export default function ResumePreviewPage() {
       </div>
 
       {/* Page body */}
-      <div className="no-print pt-14 min-h-screen bg-slate-800 flex flex-col items-center py-8 px-4">
+      <div className="no-print pt-14 min-h-screen bg-slate-800 flex flex-col items-center py-8 px-2 overflow-x-auto">
         {editing ? (
           <div className="w-full max-w-3xl">
             <p className="text-slate-400 text-xs mb-2">
@@ -320,14 +320,15 @@ const ResumeSheet = forwardRef<HTMLDivElement, { parsed: ParsedResume }>(
 )
 
 function ContactLine({ text }: { text: string }) {
-  const parts = text.split('|').map(p => p.trim()).filter(Boolean)
+  // Split on | or • separators
+  const parts = text.split(/[|•]/).map(p => p.trim()).filter(Boolean)
   return (
     <>
       {parts.map((part, i) => {
-        const isLinkedIn = /linkedin\.com/i.test(part)
+        const isLinkedIn = /linkedin/i.test(part)
         const isUrl = /^https?:\/\//i.test(part)
-        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(part)
-        const isPhone = /^\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}$/.test(part)
+        const isEmail = /[^\s@]+@[^\s@]+\.[^\s@]+/.test(part)
+        const isPhone = /\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}/.test(part)
         let node: React.ReactNode = part
         if (isLinkedIn) {
           const href = part.startsWith('http') ? part : `https://${part}`
@@ -335,7 +336,8 @@ function ContactLine({ text }: { text: string }) {
         } else if (isUrl) {
           node = <a href={part} style={{ color: '#333', textDecoration: 'underline' }}>{part}</a>
         } else if (isEmail) {
-          node = <a href={`mailto:${part}`} style={{ color: '#333', textDecoration: 'underline' }}>{part}</a>
+          const email = part.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ?? part
+          node = <a href={`mailto:${email}`} style={{ color: '#333', textDecoration: 'underline' }}>{part}</a>
         } else if (isPhone) {
           node = <a href={`tel:${part.replace(/\D/g, '')}`} style={{ color: '#333' }}>{part}</a>
         }
