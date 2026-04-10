@@ -25,6 +25,8 @@ export default function DraftsPage() {
   const [clError, setClError] = useState('')
   const [activeTab, setActiveTab] = useState<'resume' | 'cover_letter'>('resume')
   const [markingApplied, setMarkingApplied] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  const [regenError, setRegenError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -124,6 +126,46 @@ export default function DraftsPage() {
     }
   }
 
+  async function handleRegenerate(draft: ProcessedState) {
+    setRegenerating(true)
+    setRegenError('')
+    try {
+      const settings = await getSettings()
+      const res = await fetch('/api/manual-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jd_text: draft.jd_text ?? '',
+          company: draft.company,
+          title: draft.title,
+          location: draft.location,
+          master_resume: settings.master_resume,
+          fact_bank: settings.fact_bank,
+          role_key: draft.role_key,
+        }),
+      })
+      if (!res.ok) throw new Error('Regeneration failed')
+      const { score_result, generate_result } = await res.json()
+      const updated: ProcessedState = {
+        ...draft,
+        resume_text: generate_result.resume_text,
+        output_file: generate_result.output_file,
+        integrity_notes: generate_result.integrity_notes,
+        match_pct: score_result.match_pct,
+        cover_letter_text: undefined,
+        updated_at: new Date().toISOString(),
+      }
+      await saveProcessedState(updated)
+      setDrafts((prev) => prev.map((d) => d.id === draft.id ? updated : d))
+      setSelected(updated)
+      setActiveTab('resume')
+    } catch {
+      setRegenError('Regeneration failed. Try again.')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -200,6 +242,15 @@ export default function DraftsPage() {
                 {markingApplied ? 'Marking...' : 'Mark as Applied'}
               </button>
             )}
+
+            <button
+              onClick={() => handleRegenerate(selected)}
+              disabled={regenerating}
+              className="w-full border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-sm font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {regenerating ? 'Regenerating...' : '↺ Regenerate Resume'}
+            </button>
+            {regenError && <p className="text-red-400 text-xs">{regenError}</p>}
 
             {selected.integrity_notes && (
               <div className="rounded-lg bg-slate-900 px-3 py-2">
