@@ -12,10 +12,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Extract name and contact from master resume header
+    // Extract name and all header lines from master resume
     const masterLines = master_resume.split('\n').map((l: string) => l.trim()).filter(Boolean)
-    const headerName = masterLines[0] ?? ''
-    const headerContact = masterLines[1] ?? ''
+    const firstSectionIdx = masterLines.findIndex((l: string, i: number) => i > 0 && /^[A-Z][A-Z\s]{3,}$/.test(l))
+    const headerBlock = masterLines.slice(0, firstSectionIdx > 0 ? firstSectionIdx : 3)
+    const headerName = headerBlock[0] ?? ''
+    const headerContact = headerBlock.slice(1).join('\n')
 
     const prompt = `You are a professional cover letter writer. Write a compelling, human cover letter for this role.
 

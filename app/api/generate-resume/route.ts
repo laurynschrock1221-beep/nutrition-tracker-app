@@ -34,11 +34,14 @@ export async function POST(req: NextRequest) {
     const today = new Date().toISOString().split('T')[0]
     const outputFile = `${company} — ${title} — ${today} — match ${score_result.match_pct}%`
 
-    // Extract name and contact line directly from the master resume header
+    // Extract name and all header lines directly from the master resume
     // so the AI cannot substitute or redact them
     const masterLines = master_resume.split('\n').map(l => l.trim()).filter(Boolean)
-    const headerName = masterLines[0] ?? ''
-    const headerContact = masterLines[1] ?? ''
+    // Find where first ALL-CAPS section header begins to delimit the header block
+    const firstSectionIdx = masterLines.findIndex((l, i) => i > 0 && /^[A-Z][A-Z\s]{3,}$/.test(l))
+    const headerBlock = masterLines.slice(0, firstSectionIdx > 0 ? firstSectionIdx : 3)
+    const headerName = headerBlock[0] ?? ''
+    const headerContact = headerBlock.slice(1).join('\n')
 
     const prompt = `You are a professional resume writer. Create a tailored resume for this specific role.
 
@@ -61,7 +64,7 @@ Strengths: ${score_result.strengths.join('; ')}
 ${score_result.gaps.length > 0 ? `Gaps: ${score_result.gaps.join('; ')}` : ''}
 
 OUTPUT FORMAT — copy this structure exactly, including exact section header text.
-The first two lines are provided for you — output them exactly as shown, do not alter them:
+The header lines below are hardcoded — output them exactly as shown, do not alter or omit any of them:
 
 ${headerName}
 ${headerContact}
