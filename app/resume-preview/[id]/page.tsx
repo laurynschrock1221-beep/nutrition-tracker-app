@@ -187,7 +187,7 @@ export default function ResumePreviewPage() {
 
 /* ─── Scaled wrapper for mobile ────────────────────────────────────── */
 
-function ScaledResumeSheet({ parsed, sheetRef }: { parsed: ParsedResume; sheetRef: React.RefObject<HTMLDivElement> }) {
+function ScaledResumeSheet({ parsed, sheetRef }: { parsed: ParsedResume; sheetRef: React.RefObject<HTMLDivElement | null> }) {
   const wrapperRef = React.useRef<HTMLDivElement>(null)
   const [scale, setScale] = React.useState(1)
 
