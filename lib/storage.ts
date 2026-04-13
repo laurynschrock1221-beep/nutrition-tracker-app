@@ -76,12 +76,23 @@ export async function saveProcessedState(state: Omit<ProcessedState, 'user_id'>)
   const uid = await getUserId()
   if (!uid) return
   const now = new Date().toISOString()
-  await supabase
+
+  // Strip fields that may not exist in DB yet — try with them first, fall back without
+  const payload = { ...state, user_id: uid, updated_at: now }
+  const { error } = await supabase
     .from('processed_state')
-    .upsert(
-      { ...state, user_id: uid, updated_at: now },
-      { onConflict: 'role_key,user_id' }
-    )
+    .upsert(payload, { onConflict: 'role_key,user_id' })
+
+  if (error) {
+    // Retry without strengths/gaps in case columns haven't been migrated yet
+    const { strengths: _s, gaps: _g, ...safePayload } = payload as typeof payload & { strengths?: unknown; gaps?: unknown }
+    const { error: retryError } = await supabase
+      .from('processed_state')
+      .upsert(safePayload, { onConflict: 'role_key,user_id' })
+    if (retryError) {
+      console.error('saveProcessedState error:', retryError)
+    }
+  }
 }
 
 export async function updateProcessedStatus(
