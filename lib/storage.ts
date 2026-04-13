@@ -74,24 +74,32 @@ export async function getProcessedStatesByStatus(status: RoleStatus): Promise<Pr
 
 export async function saveProcessedState(state: Omit<ProcessedState, 'user_id'>): Promise<void> {
   const uid = await getUserId()
-  if (!uid) return
+  if (!uid) {
+    console.error('saveProcessedState: no user id — user not authenticated')
+    return
+  }
   const now = new Date().toISOString()
 
-  // Strip fields that may not exist in DB yet — try with them first, fall back without
-  const payload = { ...state, user_id: uid, updated_at: now }
+  // Strip strengths/gaps in case columns haven't been migrated yet
+  const { strengths, gaps, ...baseState } = state as typeof state & { strengths?: unknown; gaps?: unknown }
+  const payload = { ...baseState, user_id: uid, updated_at: now }
+
   const { error } = await supabase
     .from('processed_state')
     .upsert(payload, { onConflict: 'role_key,user_id' })
 
   if (error) {
-    // Retry without strengths/gaps in case columns haven't been migrated yet
-    const { strengths: _s, gaps: _g, ...safePayload } = payload as typeof payload & { strengths?: unknown; gaps?: unknown }
-    const { error: retryError } = await supabase
+    console.error('saveProcessedState error:', error.message, error.details, error.hint)
+    throw new Error(error.message)
+  }
+
+  // If strengths/gaps columns exist, update them separately
+  if (strengths || gaps) {
+    await supabase
       .from('processed_state')
-      .upsert(safePayload, { onConflict: 'role_key,user_id' })
-    if (retryError) {
-      console.error('saveProcessedState error:', retryError)
-    }
+      .update({ strengths, gaps })
+      .eq('role_key', state.role_key)
+      .eq('user_id', uid)
   }
 }
 
