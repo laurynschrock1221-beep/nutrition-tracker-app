@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { getProcessedStateById, saveProcessedState } from '@/lib/storage'
 import { ContactLine } from '@/app/resume-preview/[id]/page'
@@ -12,8 +12,10 @@ export default function CoverLetterPreviewPage() {
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
   const [saving, setSaving] = useState(false)
+  const [savingPDF, setSavingPDF] = useState(false)
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(1)
+  const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!id) return
@@ -39,6 +41,40 @@ export default function CoverLetterPreviewPage() {
     }
   }
 
+  async function handleSavePDF() {
+    if (!printRef.current || !draft) return
+    setSavingPDF(true)
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ])
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      })
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'in', format: 'letter' })
+      const pageW = 8.5
+      const pageH = 11
+      const imgH = (canvas.height * pageW) / canvas.width
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageW, imgH)
+      let yLeft = imgH - pageH
+      while (yLeft > 0) {
+        pdf.addPage()
+        pdf.addImage(imgData, 'JPEG', 0, -(imgH - yLeft), pageW, imgH)
+        yLeft -= pageH
+      }
+      const filename = `cover-letter-${draft.company.replace(/\s+/g, '-')}-${draft.title.replace(/\s+/g, '-')}.pdf`
+      pdf.save(filename)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+    } finally {
+      setSavingPDF(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950">
@@ -57,26 +93,6 @@ export default function CoverLetterPreviewPage() {
 
   return (
     <>
-      <style>{`
-        @page { size: letter; margin: 0; }
-        @media print {
-          html, body { background: white !important; margin: 0 !important; }
-          body * { visibility: hidden; }
-          .cl-sheet, .cl-sheet * { visibility: visible; }
-          .cl-sheet {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 8.5in !important;
-            min-height: 11in !important;
-            padding: 1in !important;
-            box-shadow: none !important;
-            margin: 0 !important;
-            transform: none !important;
-          }
-        }
-      `}</style>
-
       {/* Toolbar */}
       <div className="no-print fixed top-0 left-0 right-0 z-50 bg-slate-900 border-b border-slate-700">
         {/* Row 1: close, title, primary action */}
@@ -109,10 +125,11 @@ export default function CoverLetterPreviewPage() {
             </div>
           ) : (
             <button
-              onClick={() => window.print()}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors"
+              onClick={handleSavePDF}
+              disabled={savingPDF}
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-medium px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors"
             >
-              Save as PDF
+              {savingPDF ? 'Generating…' : 'Save as PDF'}
             </button>
           )}
         </div>
@@ -142,8 +159,15 @@ export default function CoverLetterPreviewPage() {
         )}
       </div>
 
+      {/* Off-screen capture target for PDF — no transforms, not visible to user */}
+      <div style={{ position: 'fixed', top: 0, left: '-9999px', zIndex: -1, pointerEvents: 'none' }}>
+        <div ref={printRef}>
+          <CoverLetterSheet text={draft.cover_letter_text ?? ''} />
+        </div>
+      </div>
+
       {/* Page body */}
-      <div className="no-print pt-24 min-h-screen bg-slate-800 flex flex-col items-center py-8 px-2">
+      <div className="pt-24 min-h-screen bg-slate-800 flex flex-col items-center py-8 px-2">
         {editing ? (
           <div className="w-full max-w-3xl">
             <p className="text-slate-400 text-xs mb-2">Edit the cover letter text. Click Save to update the preview.</p>
