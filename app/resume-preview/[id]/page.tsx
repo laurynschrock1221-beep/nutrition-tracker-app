@@ -16,7 +16,7 @@ export default function ResumePreviewPage() {
   const [editText, setEditText] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(1.5)
   const sheetRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
