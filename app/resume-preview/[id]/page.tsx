@@ -16,7 +16,8 @@ export default function ResumePreviewPage() {
   const [editText, setEditText] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [zoom, setZoom] = useState(2)
+  const BASE_ZOOM = 2 // this is the "100%" baseline
+  const [zoom, setZoom] = useState(BASE_ZOOM)
   const sheetRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -147,12 +148,12 @@ export default function ResumePreviewPage() {
             </button>
             <div className="flex items-center border border-slate-700 rounded-lg overflow-hidden">
               <button
-                onClick={() => setZoom(z => Math.max(0.3, +(z - 0.1).toFixed(1)))}
+                onClick={() => setZoom(z => Math.max(BASE_ZOOM * 0.4, +(z - BASE_ZOOM * 0.1).toFixed(3)))}
                 className="text-slate-300 hover:text-white text-base px-3 py-1 transition-colors"
               >−</button>
-              <span className="text-slate-400 text-xs px-2">{Math.round(zoom * 100)}%</span>
+              <span className="text-slate-400 text-xs px-2">{Math.round((zoom / BASE_ZOOM) * 100)}%</span>
               <button
-                onClick={() => setZoom(z => Math.min(2, +(z + 0.1).toFixed(1)))}
+                onClick={() => setZoom(z => Math.min(BASE_ZOOM * 2, +(z + BASE_ZOOM * 0.1).toFixed(3)))}
                 className="text-slate-300 hover:text-white text-base px-3 py-1 transition-colors"
               >+</button>
             </div>
