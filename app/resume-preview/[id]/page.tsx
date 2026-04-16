@@ -65,35 +65,21 @@ export default function ResumePreviewPage() {
   return (
     <>
       <style>{`
+        @page { size: letter; margin: 0; }
         @media print {
-          .no-print { display: none !important; }
-          body { margin: 0; background: white; }
+          html, body { background: white !important; margin: 0 !important; }
+          body * { visibility: hidden; }
+          .resume-sheet, .resume-sheet * { visibility: visible; }
           .resume-sheet {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
             width: 8.5in !important;
             min-height: 11in !important;
             padding: 0.75in !important;
             box-shadow: none !important;
             margin: 0 !important;
             transform: none !important;
-          }
-        }
-        @page { size: letter; margin: 0; }
-        .resume-sheet-wrapper {
-          display: flex;
-          justify-content: center;
-          width: 100%;
-          overflow-x: hidden;
-        }
-        .resume-sheet {
-          transform-origin: top center;
-        }
-        @media (max-width: 820px) {
-          .resume-sheet-wrapper {
-            overflow-x: visible;
-          }
-          .resume-sheet {
-            transform: scale(var(--resume-scale, 0.45));
-            margin-bottom: calc((var(--resume-scale, 0.45) - 1) * 11in);
           }
         }
       `}</style>
@@ -192,10 +178,6 @@ export default function ResumePreviewPage() {
         )}
       </div>
 
-      {/* Always-rendered sheet for print (hidden in browser, shown on print) */}
-      <div className="hidden print:block">
-        <ResumeSheet parsed={parsed} ref={null} />
-      </div>
     </>
   )
 }

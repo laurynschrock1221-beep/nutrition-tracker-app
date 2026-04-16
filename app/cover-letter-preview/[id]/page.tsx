@@ -58,10 +58,15 @@ export default function CoverLetterPreviewPage() {
   return (
     <>
       <style>{`
+        @page { size: letter; margin: 0; }
         @media print {
-          .no-print { display: none !important; }
-          body { margin: 0; background: white; }
+          html, body { background: white !important; margin: 0 !important; }
+          body * { visibility: hidden; }
+          .cl-sheet, .cl-sheet * { visibility: visible; }
           .cl-sheet {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
             width: 8.5in !important;
             min-height: 11in !important;
             padding: 1in !important;
@@ -70,7 +75,6 @@ export default function CoverLetterPreviewPage() {
             transform: none !important;
           }
         }
-        @page { size: letter; margin: 0; }
       `}</style>
 
       {/* Toolbar */}
@@ -154,10 +158,6 @@ export default function CoverLetterPreviewPage() {
         )}
       </div>
 
-      {/* Print-only sheet */}
-      <div className="hidden print:block">
-        <CoverLetterSheet text={editing ? editText : (draft.cover_letter_text ?? '')} />
-      </div>
     </>
   )
 }

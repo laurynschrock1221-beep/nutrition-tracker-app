@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   getProcessedStatesByStatus,
   deleteProcessedState,
@@ -14,6 +15,7 @@ import {
 import type { ProcessedState, ApplicationEntry } from '@/lib/types'
 
 export default function DraftsPage() {
+  const router = useRouter()
   const [drafts, setDrafts] = useState<ProcessedState[]>([])
   const [applications, setApplications] = useState<ApplicationEntry[]>([])
   const [selected, setSelected] = useState<ProcessedState | null>(null)
@@ -88,6 +90,7 @@ export default function DraftsPage() {
       }
       await saveApplication(entry)
       setApplications((prev) => [...prev, { ...entry, user_id: '' }])
+      router.push('/tracker')
     } finally {
       setMarkingApplied(false)
     }
