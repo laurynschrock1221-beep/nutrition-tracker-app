@@ -284,10 +284,14 @@ export async function saveSettings(s: Partial<UserSettings>): Promise<void> {
 // ── Application Tracker ───────────────────────────────────────────────────────
 
 export async function getApplications(): Promise<ApplicationEntry[]> {
-  const { data } = await supabase
+  const uid = await getUserId()
+  if (!uid) return []
+  const { data, error } = await supabase
     .from('application_tracker')
     .select('*')
+    .eq('user_id', uid)
     .order('updated_at', { ascending: false })
+  if (error) console.error('getApplications error:', error.message)
   return (data ?? []) as ApplicationEntry[]
 }
 

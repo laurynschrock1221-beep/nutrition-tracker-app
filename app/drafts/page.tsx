@@ -72,11 +72,15 @@ export default function DraftsPage() {
 
   async function handleMarkApplied(draft: ProcessedState) {
     setMarkingApplied(true)
+    setRegenError('')
     try {
       const existing = applications.find(
         (a) => a.role_key === draft.role_key || (a.company === draft.company && a.title === draft.title)
       )
-      if (existing) return // already tracked
+      if (existing) {
+        router.push('/tracker')
+        return
+      }
       const now = new Date().toISOString()
       const entry: Omit<ApplicationEntry, 'user_id'> = {
         id: generateId(),
@@ -89,8 +93,10 @@ export default function DraftsPage() {
         updated_at: now,
       }
       await saveApplication(entry)
-      setApplications((prev) => [...prev, { ...entry, user_id: '' }])
       router.push('/tracker')
+    } catch (err) {
+      setRegenError('Failed to save application. Please try again.')
+      console.error('handleMarkApplied error:', err)
     } finally {
       setMarkingApplied(false)
     }

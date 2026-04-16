@@ -79,6 +79,31 @@ create policy "Users see own daily_counts"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+-- ── Application Tracker ───────────────────────────────────────────────────────
+create table if not exists application_tracker (
+  id text primary key,
+  user_id uuid references auth.users not null,
+  company text not null,
+  title text not null,
+  status text not null default 'applied',
+  applied_date text,
+  follow_up_date text,
+  contact_name text,
+  contact_email text,
+  job_url text,
+  notes text,
+  role_key text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table application_tracker enable row level security;
+
+create policy "Users see own application_tracker"
+  on application_tracker for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 -- ── Run Digests ───────────────────────────────────────────────────────────────
 create table if not exists run_digests (
   id text not null,
