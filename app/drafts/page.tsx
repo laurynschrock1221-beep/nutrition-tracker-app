@@ -155,7 +155,10 @@ export default function DraftsPage() {
           role_key: draft.role_key,
         }),
       })
-      if (!res.ok) throw new Error('Regeneration failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error ?? `Request failed (${res.status})`)
+      }
       const { score_result, generate_result } = await res.json()
       const updated: ProcessedState = {
         ...draft,
@@ -172,8 +175,8 @@ export default function DraftsPage() {
       setDrafts((prev) => prev.map((d) => d.id === draft.id ? updated : d))
       setSelected(updated)
       setActiveTab('resume')
-    } catch {
-      setRegenError('Regeneration failed. Try again.')
+    } catch (err) {
+      setRegenError(err instanceof Error ? err.message : 'Regeneration failed. Try again.')
     } finally {
       setRegenerating(false)
     }
