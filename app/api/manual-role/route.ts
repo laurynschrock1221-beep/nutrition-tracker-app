@@ -1,7 +1,210 @@
 import { NextRequest, NextResponse } from 'next/server'
+import Anthropic from '@anthropic-ai/sdk'
 import type { ScoreResult, GenerateResult } from '@/lib/types'
 
-// Full pipeline: score + generate for a manual role submission
+const client = new Anthropic()
+
+// ── Inline scoring logic (avoids internal HTTP 401 on Vercel) ────────────────
+
+async function runScore(jd_text: string, master_resume: string): Promise<ScoreResult> {
+  const prompt = `You are a resume matching expert. Assess how well this candidate fits the job description.
+
+NOTE: This role was submitted manually by the user — they have expressed intent to apply, so be willing to generate a draft even at modest fit.
+
+JOB DESCRIPTION:
+${jd_text}
+
+CANDIDATE RESUME:
+${master_resume}
+
+Analyze the fit and respond with a JSON object only (no markdown, no explanation, just valid JSON):
+{
+  "should_generate": <boolean>,
+  "match_score": <integer 0-100>,
+  "match_pct": <integer, rounded to nearest 5>,
+  "drop_reason": <string or null — only if should_generate is false>,
+  "strengths": <array of 2-4 strings describing key alignment points>,
+  "gaps": <array of 0-3 strings describing key gaps>
+}
+
+Scoring guidelines:
+- 80+: Strong fit, definitely generate
+- 65-79: Good fit, generate
+- 50-64: Marginal fit, generate (especially if manual)
+- 35-49: Weak fit — generate only if manual and user intent is clear
+- Below 35: Drop (even if manual, flag as low confidence but still generate for manual)
+- For this manual role: generate if match_score >= 35, note low confidence in drop_reason if below 50
+
+Domain alignment notes (use these to calibrate your score):
+- Compliance/regulatory operations roles are a STRONG match for this candidate: she has direct experience managing 700+ IRS filings annually with 100% accuracy, nonprofit regulatory compliance, and audit-ready documentation practices. Compliance work is operationally transferable — deadline tracking, documentation systems, audit readiness, and cross-functional coordination are the core skills regardless of the specific regulatory domain (IRS, state tax, gaming licenses, etc.).
+- When a role requires specific regulatory domains the candidate hasn't listed explicitly (e.g. sales tax, charitable gaming), treat this as a minor gap — not a disqualifier. Operational compliance skills transfer directly.
+- CRM governance and data integrity roles are a STRONG match: she has hands-on Salesforce administration, governance, and data quality work.
+- Nonprofit and association management contexts are a STRONG match: she has worked at nonprofit/association organizations and understands the regulatory environment including IRS compliance, exemption status, and audit documentation.
+- Roles that are primarily accounting, bookkeeping, or financial analysis (not compliance/operations) are a WEAK match.
+
+Keep strengths and gaps concise (one sentence each).`
+
+  const message = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const raw = message.content[0].type === 'text' ? message.content[0].text.trim() : ''
+  const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
+  const result = JSON.parse(cleaned) as ScoreResult
+
+  if (!result.should_generate && result.match_score >= 35) {
+    result.should_generate = true
+    result.drop_reason = undefined
+  }
+
+  return result
+}
+
+// ── Inline generation logic ──────────────────────────────────────────────────
+
+async function runGenerate(
+  jd_text: string,
+  master_resume: string,
+  fact_bank: string | undefined,
+  score_result: ScoreResult,
+  company: string,
+  title: string,
+  location: string | undefined
+): Promise<GenerateResult> {
+  const today = new Date().toISOString().split('T')[0]
+  const outputFile = `${company} — ${title} — ${today} — match ${score_result.match_pct}%`
+
+  const masterLines = master_resume.split('\n').map(l => l.trim()).filter(Boolean)
+  const firstSectionIdx = masterLines.findIndex((l, i) => i > 0 && /^[A-Z][A-Z\s]{3,}$/.test(l))
+  const headerBlock = masterLines.slice(0, firstSectionIdx > 0 ? firstSectionIdx : 3)
+  const headerName = headerBlock[0] ?? ''
+  const headerContact = headerBlock.slice(1).join('\n')
+
+  const prompt = `You are a professional resume writer. Create a tailored resume for this specific role.
+
+TARGET ROLE:
+Company: ${company}
+Title: ${title}
+${location ? `Location: ${location}` : ''}
+
+JOB DESCRIPTION:
+${jd_text}
+
+CANDIDATE'S MASTER RESUME:
+${master_resume}
+
+${fact_bank ? `ADDITIONAL FACTS / FACT BANK:\n${fact_bank}` : ''}
+
+MATCH ASSESSMENT:
+Score: ${score_result.match_score}/100
+Strengths: ${score_result.strengths.join('; ')}
+${score_result.gaps.length > 0 ? `Gaps: ${score_result.gaps.join('; ')}` : ''}
+
+OUTPUT FORMAT — copy this structure exactly, including exact section header text.
+The header lines below are hardcoded — output them exactly as shown, do not alter or omit any of them:
+
+${headerName}
+${headerContact}
+
+PROFESSIONAL SUMMARY
+
+[2-3 sentence tailored paragraph]
+
+CORE COMPETENCIES
+
+• [competency 1]
+• [competency 2]
+• [competency 3]
+• [competency 4]
+• [competency 5]
+• [competency 6]
+• [competency 7]
+• [competency 8]
+
+PROFESSIONAL EXPERIENCE
+
+[Company Name – City, State]
+[Job Title | Start Month Year – End Month Year]
+• [bullet]
+• [bullet]
+• [bullet]
+• [bullet]
+• [bullet]
+
+[Company Name – City, State]
+[Job Title | Start Month Year – End Month Year]
+• [bullet]
+• [bullet]
+• [bullet]
+
+EDUCATION
+
+[Degree]
+[Institution], [Year]
+
+[Additional degree or certificate group]
+[Institution], [Year]
+
+TECHNICAL TOOLS
+
+[Tool1] | [Tool2] | [Tool3] | [Tool4]
+
+RULES — violating any rule makes the output unusable:
+1. The five section headers must appear EXACTLY as shown: PROFESSIONAL SUMMARY, CORE COMPETENCIES, PROFESSIONAL EXPERIENCE, EDUCATION, TECHNICAL TOOLS — no substitutions, no additions, no extra sections
+2. CORE COMPETENCIES: exactly 7-8 bullet points, each 1-4 words, chosen to match the target role
+3. PROFESSIONAL EXPERIENCE: 5-7 bullets for the most recent role, 3-4 for older roles
+4. PROFESSIONAL EXPERIENCE must be ordered by most recent end date — roles with "Present" always appear first, regardless of start date. A role active "Present" outranks any ended role even if the ended role started more recently.
+5. Each bullet is one sentence, maximum 20 words, starts with a strong past-tense action verb (use present tense for current "Present" roles)
+6. Do NOT invent, fabricate, or embellish any experience, dates, titles, companies, or credentials
+7. TECHNICAL TOOLS: pipe-separated on a single line, no bullets
+8. No markdown, no asterisks, no bold/italic markers — plain text only
+9. Output ONLY the resume. No preamble, explanation, or commentary.`
+
+  const message = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 2000,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const resume_text = message.content[0].type === 'text' ? message.content[0].text.trim() : ''
+
+  const integrityPrompt = `Review this tailored resume against the original master resume and note any factual discrepancies, embellishments, or fabricated details. Be brief.
+
+MASTER RESUME:
+${master_resume}
+
+TAILORED RESUME:
+${resume_text}
+
+Respond with one of:
+- "Clean: No integrity issues found."
+- "Note: [brief description of any concerns]"
+
+Keep it to one line.`
+
+  const integrityMsg = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 128,
+    messages: [{ role: 'user', content: integrityPrompt }],
+  })
+
+  const integrity_notes =
+    integrityMsg.content[0].type === 'text'
+      ? integrityMsg.content[0].text.trim()
+      : 'Integrity check skipped.'
+
+  return {
+    resume_text,
+    output_file: outputFile,
+    integrity_notes,
+    match_pct: score_result.match_pct,
+  }
+}
+
+// ── Route handler ────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const { jd_text, company, title, location, master_resume, fact_bank, role_key } =
@@ -14,66 +217,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const base = req.nextUrl.origin
-
-    // Step 1: Score the role
-    let scoreRes: Response
-    try {
-      scoreRes = await fetch(`${base}/api/score-role`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jd_text, master_resume, is_manual: true }),
-      })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('manual-role: score fetch failed:', msg)
-      return NextResponse.json({ error: `Scoring request failed: ${msg}` }, { status: 500 })
-    }
-
-    if (!scoreRes.ok) {
-      const errBody = await scoreRes.json().catch(() => ({}))
-      const msg = errBody.error ?? `Score API returned ${scoreRes.status}`
-      console.error('manual-role: score error:', msg)
-      return NextResponse.json({ error: msg }, { status: 500 })
-    }
-
-    const score_result = (await scoreRes.json()) as ScoreResult
-
-    // Step 2: Generate resume
-    let genRes: Response
-    try {
-      genRes = await fetch(`${base}/api/generate-resume`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jd_text,
-          master_resume,
-          fact_bank,
-          score_result,
-          company: company ?? 'Unknown Company',
-          title: title ?? 'Unknown Title',
-          location,
-        }),
-      })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('manual-role: generate fetch failed:', msg)
-      return NextResponse.json({ error: `Generation request failed: ${msg}` }, { status: 500 })
-    }
-
-    if (!genRes.ok) {
-      const errBody = await genRes.json().catch(() => ({}))
-      const msg = errBody.error ?? `Generate API returned ${genRes.status}`
-      console.error('manual-role: generate error:', msg)
-      return NextResponse.json({ error: msg }, { status: 500 })
-    }
-
-    const generate_result = (await genRes.json()) as GenerateResult
+    const score_result = await runScore(jd_text, master_resume)
+    const generate_result = await runGenerate(
+      jd_text,
+      master_resume,
+      fact_bank,
+      score_result,
+      company ?? 'Unknown Company',
+      title ?? 'Unknown Title',
+      location
+    )
 
     return NextResponse.json({ score_result, generate_result, role_key })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('manual-role unexpected error:', msg)
-    return NextResponse.json({ error: `Pipeline error: ${msg}` }, { status: 500 })
+    console.error('manual-role error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
