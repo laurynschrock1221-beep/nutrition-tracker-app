@@ -301,7 +301,7 @@ export default function DraftsPage() {
             ) : null}
 
             {/* ATS Keyword Check */}
-            {(selected.ats_keywords_present?.length || selected.ats_keywords_missing?.length) ? (
+            {(selected.ats_keywords_present !== undefined || selected.ats_keywords_missing !== undefined) ? (
               <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">ATS Keywords</p>

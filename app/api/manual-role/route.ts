@@ -273,8 +273,13 @@ export async function POST(req: NextRequest) {
       location
     )
 
-    // ATS check runs after generation so it can compare the actual resume output
-    const ats_result = await runAtsCheck(jd_text, generate_result.resume_text)
+    // ATS check — non-fatal: if it fails, pipeline still succeeds
+    let ats_result = { keywords_present: [] as string[], keywords_missing: [] as string[] }
+    try {
+      ats_result = await runAtsCheck(jd_text, generate_result.resume_text)
+    } catch (err) {
+      console.error('manual-role: ATS check failed (non-fatal):', err)
+    }
 
     return NextResponse.json({ score_result, generate_result, ats_result, role_key })
   } catch (err) {
