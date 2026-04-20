@@ -143,3 +143,13 @@ create policy "Users see own user_settings"
   on user_settings for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- ── Migrations (run after initial schema) ────────────────────────────────────
+-- Add array columns for scoring/ATS data to processed_state
+alter table processed_state
+  add column if not exists strengths         text[] default '{}',
+  add column if not exists gaps              text[] default '{}',
+  add column if not exists ats_keywords_present text[] default '{}',
+  add column if not exists ats_keywords_missing text[] default '{}',
+  add column if not exists hard_filter_risk  boolean default false,
+  add column if not exists hard_filter_reasons text[] default '{}';

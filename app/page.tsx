@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [todayStates, setTodayStates] = useState<ProcessedState[]>([])
   const [recentGenerated, setRecentGenerated] = useState<ProcessedState[]>([])
   const [followUpsDue, setFollowUpsDue] = useState<ApplicationEntry[]>([])
+  const [topGaps, setTopGaps] = useState<{ gap: string; count: number }[]>([])
   const [dailyCount, setDailyCount] = useState<DailyCount | null>(null)
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [pendingManual, setPendingManual] = useState(0)
@@ -75,6 +76,21 @@ export default function DashboardPage() {
         (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
       )
       setRecentGenerated(sorted.slice(0, 3))
+
+      // Aggregate gaps across all generated drafts
+      const gapCounts: Record<string, number> = {}
+      for (const draft of generatedS) {
+        for (const gap of draft.gaps ?? []) {
+          const key = gap.trim().toLowerCase()
+          if (key) gapCounts[key] = (gapCounts[key] ?? 0) + 1
+        }
+      }
+      const sorted_gaps = Object.entries(gapCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([gap, count]) => ({ gap, count }))
+      setTopGaps(sorted_gaps)
+
       const today = todayDate()
       setFollowUpsDue(
         apps.filter(
@@ -242,6 +258,27 @@ export default function DashboardPage() {
                 )}
               </Link>
             ))}
+          </div>
+        </div>
+      )}
+
+      {topGaps.length >= 3 && (
+        <div>
+          <h2 className="text-sm font-medium text-slate-400 mb-2">Resume Gap Summary</h2>
+          <div className="rounded-2xl bg-[#111827]/80 border border-rose-500/20 backdrop-blur-md shadow-lg shadow-black/40 px-4 py-3 space-y-2">
+            <p className="text-xs text-slate-400 leading-snug">
+              These gaps appear most often across your generated drafts. Adding them to your master resume will improve future matches.
+            </p>
+            <div className="space-y-1.5">
+              {topGaps.map(({ gap, count }, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="shrink-0 text-[10px] font-medium bg-rose-500/20 border border-rose-500/30 text-rose-400 px-1.5 py-0.5 rounded-full mt-0.5">
+                    {count}×
+                  </span>
+                  <p className="text-xs text-slate-300 leading-snug">{gap}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

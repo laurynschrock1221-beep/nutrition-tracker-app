@@ -80,13 +80,15 @@ export async function saveProcessedState(state: Omit<ProcessedState, 'user_id'>)
   }
   const now = new Date().toISOString()
 
-  // Strip optional array columns — update separately after base upsert
-  const { strengths, gaps, ats_keywords_present, ats_keywords_missing, ...baseState } =
+  // Strip optional array/special columns — update separately after base upsert
+  const { strengths, gaps, ats_keywords_present, ats_keywords_missing, hard_filter_risk, hard_filter_reasons, ...baseState } =
     state as typeof state & {
       strengths?: unknown
       gaps?: unknown
       ats_keywords_present?: unknown
       ats_keywords_missing?: unknown
+      hard_filter_risk?: unknown
+      hard_filter_reasons?: unknown
     }
   const payload = { ...baseState, user_id: uid, updated_at: now }
 
@@ -104,6 +106,8 @@ export async function saveProcessedState(state: Omit<ProcessedState, 'user_id'>)
   if (gaps !== undefined) extras.gaps = gaps
   if (ats_keywords_present !== undefined) extras.ats_keywords_present = ats_keywords_present
   if (ats_keywords_missing !== undefined) extras.ats_keywords_missing = ats_keywords_missing
+  if (hard_filter_risk !== undefined) extras.hard_filter_risk = hard_filter_risk
+  if (hard_filter_reasons !== undefined) extras.hard_filter_reasons = hard_filter_reasons
   if (Object.keys(extras).length > 0) {
     await supabase
       .from('processed_state')

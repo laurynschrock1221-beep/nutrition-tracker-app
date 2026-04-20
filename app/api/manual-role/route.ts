@@ -24,7 +24,9 @@ Analyze the fit and respond with a JSON object only (no markdown, no explanation
   "match_pct": <integer, rounded to nearest 5>,
   "drop_reason": <string or null — only if should_generate is false>,
   "strengths": <array of 2-4 strings describing key alignment points>,
-  "gaps": <array of 0-3 strings describing key gaps>
+  "gaps": <array of 0-3 strings describing key gaps>,
+  "hard_filter_risk": <boolean — true if the JD has explicit requirements the candidate clearly cannot satisfy>,
+  "hard_filter_reasons": <array of 0-3 short strings describing each hard filter risk — empty array if none>
 }
 
 Scoring guidelines:
@@ -35,6 +37,14 @@ Scoring guidelines:
 - Below 35: Drop (even if manual, flag as low confidence but still generate for manual)
 - For this manual role: generate if match_score >= 35, note low confidence in drop_reason if below 50
 
+Hard filter risk guidelines — set hard_filter_risk: true ONLY for explicit, unambiguous requirements the candidate clearly does not meet:
+- Required credentials the candidate doesn't have (e.g. "CPA required", "JD required", "active bar license", "Series 7", "PMP required", "PE license")
+- Required security clearance the candidate doesn't hold
+- Required industry-specific experience stated as mandatory (e.g. "must have gaming industry experience", "healthcare regulatory only")
+- Minimum years of experience the candidate clearly falls short of (e.g. "10+ years required" when candidate has 3)
+- Do NOT flag as hard filter: preferred credentials, nice-to-have certifications, domain exposure that's transferable, standard phrasing like "experience with X preferred"
+- hard_filter_reasons should name the specific requirement, e.g. "CPA license required", "10+ years required", "gaming industry mandatory"
+
 Domain alignment notes (use these to calibrate your score):
 - Compliance/regulatory operations roles are a STRONG match for this candidate: she has direct experience managing 700+ IRS filings annually with 100% accuracy, nonprofit regulatory compliance, and audit-ready documentation practices. Compliance work is operationally transferable — deadline tracking, documentation systems, audit readiness, and cross-functional coordination are the core skills regardless of the specific regulatory domain (IRS, state tax, gaming licenses, etc.).
 - When a role requires specific regulatory domains the candidate hasn't listed explicitly (e.g. sales tax, charitable gaming), treat this as a minor gap — not a disqualifier. Operational compliance skills transfer directly.
@@ -42,7 +52,7 @@ Domain alignment notes (use these to calibrate your score):
 - Nonprofit and association management contexts are a STRONG match: she has worked at nonprofit/association organizations and understands the regulatory environment including IRS compliance, exemption status, and audit documentation.
 - Roles that are primarily accounting, bookkeeping, or financial analysis (not compliance/operations) are a WEAK match.
 
-Keep strengths and gaps concise (one sentence each).`
+Keep strengths, gaps, and hard_filter_reasons concise (one phrase or sentence each).`
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -275,6 +285,11 @@ export async function POST(req: NextRequest) {
     }
 
     const score_result = await runScore(jd_text, master_resume)
+
+    // Ensure hard filter fields are always present
+    if (score_result.hard_filter_risk === undefined) score_result.hard_filter_risk = false
+    if (!score_result.hard_filter_reasons) score_result.hard_filter_reasons = []
+
     const generate_result = await runGenerate(
       jd_text,
       master_resume,

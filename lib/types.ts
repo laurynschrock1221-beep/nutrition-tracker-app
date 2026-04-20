@@ -26,6 +26,8 @@ export interface ProcessedState {
   gaps?: string[]
   ats_keywords_present?: string[]
   ats_keywords_missing?: string[]
+  hard_filter_risk?: boolean
+  hard_filter_reasons?: string[]
   last_seen: string
   today: boolean
   is_manual: boolean
@@ -100,6 +102,8 @@ export interface ScoreResult {
   drop_reason?: string
   strengths: string[]
   gaps: string[]
+  hard_filter_risk?: boolean
+  hard_filter_reasons?: string[]
 }
 
 export interface CheapScoreResult {

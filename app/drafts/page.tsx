@@ -170,6 +170,8 @@ export default function DraftsPage() {
         gaps: score_result.gaps,
         ats_keywords_present: ats_result?.keywords_present ?? [],
         ats_keywords_missing: ats_result?.keywords_missing ?? [],
+        hard_filter_risk: score_result.hard_filter_risk ?? false,
+        hard_filter_reasons: score_result.hard_filter_reasons ?? [],
         cover_letter_text: undefined,
         updated_at: new Date().toISOString(),
       }
@@ -258,6 +260,22 @@ export default function DraftsPage() {
                 </span>
               )}
             </div>
+
+            {selected.hard_filter_risk && (
+              <div className="rounded-xl bg-orange-500/10 border border-orange-500/30 px-3 py-2.5">
+                <p className="text-[10px] font-medium text-orange-400 uppercase tracking-wider mb-1.5">⚠ Hard Filter Risk</p>
+                <p className="text-xs text-orange-300/80 leading-snug mb-1.5">
+                  This JD has explicit requirements that may trigger auto-rejection before a human sees your resume.
+                </p>
+                {selected.hard_filter_reasons && selected.hard_filter_reasons.length > 0 && (
+                  <div className="space-y-0.5">
+                    {selected.hard_filter_reasons.map((r, i) => (
+                      <p key={i} className="text-xs text-orange-300/70 leading-snug">• {r}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {!isApplied(selected) && (
               <button
@@ -515,6 +533,11 @@ export default function DraftsPage() {
                   {isApplied(draft) && (
                     <span className="text-[10px] text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded-full">
                       applied
+                    </span>
+                  )}
+                  {draft.hard_filter_risk && (
+                    <span className="text-[10px] text-orange-400 border border-orange-500/40 px-1.5 py-0.5 rounded-full">
+                      ⚠ hard filter risk
                     </span>
                   )}
                 </div>
