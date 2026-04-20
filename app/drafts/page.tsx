@@ -305,25 +305,38 @@ export default function DraftsPage() {
               <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">ATS Keywords</p>
-                  {selected.ats_keywords_present && selected.ats_keywords_missing && (
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                      selected.ats_keywords_missing.length === 0
-                        ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
-                        : selected.ats_keywords_missing.length <= 2
-                        ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
-                        : 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
-                    }`}>
-                      {selected.ats_keywords_present.length}/{selected.ats_keywords_present.length + selected.ats_keywords_missing.length} matched
-                    </span>
-                  )}
+                  {selected.ats_keywords_present && selected.ats_keywords_missing && (() => {
+                    const required = selected.ats_keywords_present!.filter(k => !k.startsWith('~'))
+                    const missing = selected.ats_keywords_missing!.length
+                    const total = required.length + missing
+                    return (
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                        missing === 0
+                          ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
+                          : missing <= 2
+                          ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+                          : 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
+                      }`}>
+                        {required.length}/{total} required matched
+                      </span>
+                    )
+                  })()}
                 </div>
                 {selected.ats_keywords_present && selected.ats_keywords_present.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {selected.ats_keywords_present.map((kw, i) => (
-                      <span key={i} className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                        ✓ {kw}
-                      </span>
-                    ))}
+                    {selected.ats_keywords_present.map((kw, i) => {
+                      const isPreferred = kw.startsWith('~')
+                      const label = isPreferred ? kw.replace(/^~\s*/, '') : kw
+                      return isPreferred ? (
+                        <span key={i} className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                          ~ {label}
+                        </span>
+                      ) : (
+                        <span key={i} className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                          ✓ {label}
+                        </span>
+                      )
+                    })}
                   </div>
                 )}
                 {selected.ats_keywords_missing && selected.ats_keywords_missing.length > 0 && (

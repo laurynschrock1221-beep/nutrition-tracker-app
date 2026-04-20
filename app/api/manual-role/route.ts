@@ -217,21 +217,22 @@ ${jd_text}
 RESUME:
 ${resume_text}
 
-Extract the 10-15 most important ATS keywords and phrases from the job description — focus on:
-- Required skills, tools, and technologies
-- Key action verbs and role-specific terminology
-- Required credentials, certifications, or qualifications
-- Industry-specific phrases
+Extract the 10-15 most important ATS keywords from the job description. For each keyword, classify it:
 
-Then check each one: is it present (or a close equivalent) in the resume?
+REQUIRED: explicitly marked as required, must-have, or minimum qualification — ATS will hard-filter on these
+PREFERRED: marked as preferred, desired, a plus, or nice-to-have — ATS may use these for ranking but not hard filtering
+
+Only put a keyword in "keywords_missing" if it is REQUIRED and NOT present in the resume.
+Put preferred/nice-to-have keywords that are missing in "keywords_present" with a "~" prefix to indicate they are preferred but not required (e.g. "~ Salesforce").
+Put clearly present keywords (required or preferred) in "keywords_present" without any prefix.
 
 Respond with ONLY valid JSON — no markdown, no explanation:
 {
-  "keywords_present": ["keyword1", "keyword2"],
-  "keywords_missing": ["keyword3", "keyword4"]
+  "keywords_present": ["keyword1", "~ preferred_keyword"],
+  "keywords_missing": ["required_keyword_not_in_resume"]
 }
 
-Keep each keyword short (1-4 words). Be strict — if a keyword isn't clearly present, put it in missing.`
+Keep each keyword short (1-4 words). Only flag as missing if it is truly required and absent.`
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
