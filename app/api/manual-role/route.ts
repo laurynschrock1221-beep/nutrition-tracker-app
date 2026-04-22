@@ -7,96 +7,95 @@ const client = new Anthropic()
 // ── Inline scoring logic (avoids internal HTTP 401 on Vercel) ────────────────
 
 async function runScore(jd_text: string, master_resume: string): Promise<ScoreResult> {
-  const prompt = `You are a resume matching expert. Assess how well this candidate fits the job description.
+  const prompt = `You are a resume matching expert. Before scoring, read all instructions below carefully — they define how to interpret this candidate's experience.
 
-NOTE: This role was submitted manually by the user — they have expressed intent to apply, so be willing to generate a draft even at modest fit.
+── SCORING PHILOSOPHY ───────────────────────────────────────────────────────
+Score based on tailored potential, not literal resume keywords. This candidate's experience
+can be reframed to match many JD requirements — your score should reflect what a tailored
+resume could honestly claim, not just what the master resume literally says.
 
-JOB DESCRIPTION:
+Hard vs soft gaps — this distinction drives the score:
+- HARD gap: specific required credential (CPA, JD, bar license, Series 7, PE, security clearance),
+  mandatory industry with no transferable equivalent, years clearly unmet. Hard gaps reduce score.
+- SOFT gap: industry vocabulary difference, sector exposure, preferred (not required) certifications,
+  domain the candidate hasn't named explicitly but has real transferable experience for.
+  Soft gaps do NOT meaningfully reduce the score — they are bridgeable through reframing.
+
+"OR" clauses: If a JD says "fintech OR regulatory-heavy environment", treat that as MET.
+The candidate has two legitimate regulatory-heavy environments — score as if the requirement
+is fully satisfied, not partially.
+
+── CANDIDATE EXPERIENCE REFRAMINGS ──────────────────────────────────────────
+Apply these when evaluating whether the candidate meets JD requirements:
+
+COMPLIANCE & REGULATORY OPERATIONS — treat as STRONG match for any compliance role:
+- Her AAUW work is compliance framework governance at national scale: building enforcement
+  frameworks, developing escalation paths, conducting noncompliance investigations, maintaining
+  ongoing risk assessment across 883 external entities across all 50 states.
+- The 883 AAUW affiliates ARE third parties. Her work reviewing/validating their financial
+  submissions, assessing compliance status, and remediating noncompliance (including revoking
+  tax-exempt status) IS third-party due diligence. Credit it as such.
+- Managing IRS compliance for 883 affiliates across all 50 states IS multi-jurisdictional
+  compliance at national scale. Credit it when JDs ask for multi-state or multi-jurisdiction experience.
+- International export compliance under USDA and WTC regulations (Leprino Foods) is a second
+  regulatory-heavy environment. When a JD says "fintech OR regulatory-heavy", both environments
+  together mean this requirement is fully met.
+- Specific regulatory domains not listed (sales tax, gaming, healthcare) = SOFT gap only.
+  Operational compliance skills transfer directly.
+
+CRM & DATA INTEGRITY — STRONG match:
+- Hands-on Salesforce administration, governance, and data quality. 8,000+ records managed.
+- Credit for any CRM platform, data governance, or data integrity requirement.
+
+NONPROFIT / ASSOCIATION MANAGEMENT — STRONG match:
+- Direct nonprofit/association experience including IRS compliance, exemption status
+  governance, and audit documentation.
+
+AI TOOLS — strength when JD mentions AI:
+- Active daily user of Claude, ChatGPT, and Gemini for compliance workflow optimization.
+
+PROJECT MANAGEMENT — credit as initiative leadership:
+- Led two org-wide compliance initiatives end-to-end. Not coordination — initiative ownership.
+
+WEAK match: roles that are primarily accounting, bookkeeping, or financial analysis.
+
+── SALARY & LOCATION FILTERS ────────────────────────────────────────────────
+If the JD specifies salary below $85,000 → add "Salary below $85k minimum" to hard_filter_reasons
+If the role requires relocation or is fully on-site outside Denver metro → add
+"Location outside Denver metro / relocation required" to hard_filter_reasons
+Set hard_filter_risk: true if either filter triggers.
+
+── HARD FILTER RISK ─────────────────────────────────────────────────────────
+Set hard_filter_risk: true ONLY for explicit, unambiguous blockers:
+- Required credential not held (CPA, JD, bar license, Series 7, PMP, PE, security clearance)
+- Mandatory industry with no transferable equivalent, stated as non-negotiable
+- Years of experience clearly not met
+- Salary or location filters above
+Do NOT flag: preferred credentials, transferable domains, soft vocabulary gaps.
+
+── JOB DESCRIPTION ──────────────────────────────────────────────────────────
 ${jd_text}
 
-CANDIDATE RESUME:
+── CANDIDATE RESUME ─────────────────────────────────────────────────────────
 ${master_resume}
 
-Analyze the fit and respond with a JSON object only (no markdown, no explanation, just valid JSON):
+── OUTPUT ───────────────────────────────────────────────────────────────────
+NOTE: This role was manually submitted — generate a draft if match_score >= 35.
+
+Respond with a JSON object only (no markdown, no explanation, just valid JSON):
 {
   "should_generate": <boolean>,
   "match_score": <integer 0-100>,
   "match_pct": <integer, rounded to nearest 5>,
   "drop_reason": <string or null — only if should_generate is false>,
   "strengths": <array of 2-4 strings describing key alignment points>,
-  "gaps": <array of 0-3 strings describing key gaps>,
-  "hard_filter_risk": <boolean — true if the JD has explicit requirements the candidate clearly cannot satisfy>,
-  "hard_filter_reasons": <array of 0-3 short strings — hard filter risks AND any salary/location flags>
+  "gaps": <array of 0-3 strings — only genuine hard gaps or significant soft gaps>,
+  "hard_filter_risk": <boolean>,
+  "hard_filter_reasons": <array of 0-3 short strings — empty array if none>
 }
 
-── SCORING PHILOSOPHY ───────────────────────────────────────────────────────
-Score based on tailored potential, not just literal resume keywords. This candidate's
-experience can be reframed to match many JD requirements — account for that when scoring.
-
-Hard vs soft gaps:
-- HARD gap: specific required credential (CPA, JD, bar license, Series 7, PE, security clearance),
-  mandatory industry experience with no transferable equivalent, years clearly unmet
-- SOFT gap: industry vocabulary difference, sector exposure, preferred (not required) certifications,
-  domain the candidate hasn't named explicitly but has transferable experience for
-- Only hard gaps should meaningfully reduce the score. Soft gaps are bridgeable through reframing.
-
-"OR" clauses: If a JD says "fintech OR regulatory-heavy environment", treat that as MET —
-the candidate has two regulatory-heavy environments (IRS federal compliance + international
-export compliance under USDA/WTC). Do not penalize for not having fintech specifically.
-
 Scoring thresholds:
-- 80+: Strong fit, definitely generate
-- 65-79: Good fit, generate
-- 50-64: Marginal fit, generate (especially if manual)
-- 35-49: Weak fit — generate only if manual and user intent is clear
-- Below 35: Drop (flag low confidence but still generate for manual submissions)
-- For this manual role: generate if match_score >= 35
-
-── DOMAIN ALIGNMENT ─────────────────────────────────────────────────────────
-Use these calibrations when scoring:
-
-COMPLIANCE & REGULATORY — STRONG match:
-- Candidate managed IRS federal compliance governance for 883 affiliates across all 50 states.
-  This IS multi-jurisdictional compliance at national scale.
-- She monitored 883 external entities, reviewed/validated their financial submissions, assessed
-  compliance status, identified noncompliant entities, and remediated noncompliance including
-  revoking tax-exempt status. This IS third-party due diligence.
-- She built and enforced compliance frameworks, developed escalation paths, conducted
-  noncompliance investigations, and maintained ongoing risk assessment and gap identification.
-- International export compliance under USDA and WTC regulations (Leprino Foods) is a second
-  regulatory-heavy environment — use this when JDs ask for fintech OR regulatory experience.
-- When a JD asks for a specific regulatory domain not explicitly listed (sales tax, gaming,
-  healthcare), treat it as a soft gap only — operational compliance skills transfer directly.
-
-CRM & DATA INTEGRITY — STRONG match:
-- Hands-on Salesforce administration, governance, and data quality work. 8,000+ records managed.
-
-NONPROFIT / ASSOCIATION MANAGEMENT — STRONG match:
-- Direct experience in nonprofit/association regulatory environment including IRS compliance,
-  exemption status governance, and audit documentation.
-
-AI TOOLS — flag as a strength when JD mentions AI:
-- Candidate is an active daily user of Claude, ChatGPT, and Gemini for workflow optimization.
-
-PROJECT MANAGEMENT — frame as initiative leadership:
-- Candidate led two org-wide compliance initiatives end-to-end, not just coordination.
-
-WEAK match: roles that are primarily accounting, bookkeeping, or financial analysis.
-
-── SALARY & LOCATION FILTERS ────────────────────────────────────────────────
-If the JD specifies salary below $85,000, add to hard_filter_reasons: "Salary below $85k minimum"
-If the role requires relocation outside Denver metro OR is fully on-site outside Denver,
-add to hard_filter_reasons: "Location outside Denver metro / relocation required"
-Set hard_filter_risk: true if either filter triggers.
-
-── HARD FILTER RISK ─────────────────────────────────────────────────────────
-Set hard_filter_risk: true ONLY for explicit, unambiguous requirements the candidate cannot meet:
-- Required credentials not held (CPA, JD, bar license, Series 7, PMP, PE, security clearance)
-- Mandatory industry stated as non-negotiable with no transferable equivalent
-- Years of experience the candidate clearly does not meet
-- Salary below $85k or location outside Denver metro (per filters above)
-Do NOT flag: preferred credentials, transferable domains, soft vocabulary gaps.
-
+- 80+: Strong fit  |  65-79: Good fit  |  50-64: Marginal  |  35-49: Weak (generate if manual)
 Keep strengths, gaps, and hard_filter_reasons concise (one phrase or sentence each).`
 
   const message = await client.messages.create({
