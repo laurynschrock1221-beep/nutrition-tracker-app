@@ -60,9 +60,14 @@ PROJECT MANAGEMENT — credit as initiative leadership:
 WEAK match: roles that are primarily accounting, bookkeeping, or financial analysis.
 
 ── SALARY & LOCATION FILTERS ────────────────────────────────────────────────
-If the JD specifies salary below $85,000 → add "Salary below $85k minimum" to hard_filter_reasons
-If the role requires relocation or is fully on-site outside Denver metro → add
-"Location outside Denver metro / relocation required" to hard_filter_reasons
+SALARY: Only flag if a specific salary or salary range is EXPLICITLY stated in the JD text above.
+If the stated maximum is below $85,000 → add "Salary below $85k minimum" to hard_filter_reasons.
+If the range overlaps $85k (e.g. $75k-$95k) → do NOT flag, the role can meet the minimum.
+NEVER infer, estimate, or use external knowledge about typical pay for a role type. If no salary
+is stated in the JD, do not mention salary at all.
+
+LOCATION: If the role explicitly requires relocation or is fully on-site outside Denver metro →
+add "Location outside Denver metro / relocation required" to hard_filter_reasons.
 Set hard_filter_risk: true if either filter triggers.
 
 ── HARD FILTER RISK ─────────────────────────────────────────────────────────
