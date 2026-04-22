@@ -15,11 +15,21 @@ can be reframed to match many JD requirements — your score should reflect what
 resume could honestly claim, not just what the master resume literally says.
 
 Hard vs soft gaps — this distinction drives the score:
-- HARD gap: specific required credential (CPA, JD, bar license, Series 7, PE, security clearance),
-  mandatory industry with no transferable equivalent, years clearly unmet. Hard gaps reduce score.
-- SOFT gap: industry vocabulary difference, sector exposure, preferred (not required) certifications,
-  domain the candidate hasn't named explicitly but has real transferable experience for.
-  Soft gaps do NOT meaningfully reduce the score — they are bridgeable through reframing.
+- HARD gap: specific required LICENSE or CREDENTIAL the candidate does not hold (CPA, JD, bar
+  license, Series 7, NMLS, PE, notary commission, security clearance). These are hard gates.
+- HARD gap: years of experience the candidate clearly does not meet (e.g. "10+ years required").
+- SOFT gap: industry sector or vocabulary (mortgage, fintech, healthcare, gaming, real estate).
+  Industry sector alone is NEVER a hard gap. Operations, coordination, compliance, documentation,
+  and cross-functional skills transfer across industries. Score the capability, not the sector.
+- SOFT gap: preferred or nice-to-have certifications, domain exposure, specific software listed
+  as preferred rather than required.
+- Soft gaps do NOT meaningfully reduce the score — they are bridgeable through reframing.
+
+IMPORTANT: When a JD says "X years of mortgage/lending/real estate experience required",
+ask whether the UNDERLYING SKILLS (document coordination, compliance monitoring, cross-functional
+communication, deadline management, audit readiness) are present — if yes, treat the industry
+requirement as a soft gap, not a hard one. Only treat it as hard if the JD requires a specific
+license or certification that the candidate does not hold.
 
 "OR" clauses: If a JD says "fintech OR regulatory-heavy environment", treat that as MET.
 The candidate has two legitimate regulatory-heavy environments — score as if the requirement
@@ -72,11 +82,13 @@ Set hard_filter_risk: true if either filter triggers.
 
 ── HARD FILTER RISK ─────────────────────────────────────────────────────────
 Set hard_filter_risk: true ONLY for explicit, unambiguous blockers:
-- Required credential not held (CPA, JD, bar license, Series 7, PMP, PE, security clearance)
-- Mandatory industry with no transferable equivalent, stated as non-negotiable
+- Required LICENSE or CREDENTIAL not held (CPA, JD, bar license, Series 7, NMLS, PE,
+  notary commission, security clearance)
 - Years of experience clearly not met
 - Salary or location filters above
-Do NOT flag: preferred credentials, transferable domains, soft vocabulary gaps.
+Do NOT flag: industry sector gaps, preferred credentials, transferable domains, vocabulary gaps.
+Industry experience requirements (mortgage, fintech, healthcare, etc.) are NEVER hard filter
+risks unless they come with a specific required license.
 
 ── JOB DESCRIPTION ──────────────────────────────────────────────────────────
 ${jd_text}
